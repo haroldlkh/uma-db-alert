@@ -1,0 +1,41 @@
+name: UMA Monitor
+
+on:
+  schedule:
+    - cron: "0 * * * *"     # hourly; change as you like
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: uma-monitor
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          python -m pip install playwright requests pyyaml
+          python -m playwright install --with-deps chromium
+
+      - name: Restore UMA state cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.uma_monitor
+          key: uma-state-v1
+
+      - name: Run monitor
+        env:
+          # provide secrets for plugins here
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+        run: |
+          python uma_monitor.py \
+            --url "https://uma-global.pure-db.com/?q=YOUR_QUERY" \
+            --selector ".result" \
+            --headless
