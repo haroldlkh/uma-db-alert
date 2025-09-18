@@ -1,0 +1,4 @@
+outputs:
+  - type: discord
+    settings:
+      webhook_env: DISCORD_WEBHOOK_MAIN

@@ -1,0 +1,48 @@
+name: UMA Monitor (Staging)
+
+on:
+  # Manual runs only while you build
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run without sending alerts (true/false)"
+        required: false
+        default: "true"
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: Staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install playwright requests pyyaml
+          python -m playwright install --with-deps chromium
+
+      - name: Restore state cache (Staging)
+        uses: actions/cache@v4
+        with:
+          path: ~/.uma_monitor
+          key: uma-state-staging
+
+      - name: Run monitor
+        env:
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+        run: |
+          DRY="${{ inputs.dry_run }}"
+          [ "$DRY" = "true" ] && DRY_FLAG="--dry-run" || DRY_FLAG=""
+          python uma_monitor.py \
+            --targets config/targets.yaml \
+            --filters config/filters.yaml \
+            --outputs config/outputs.yaml \
+            --headless \
+            --wait-ms 1500 \
+            $DRY_FLAG
