@@ -1,0 +1,7 @@
+sites:
+  - id: uma_global
+    scraper: uma_global
+    base_url: "https://uma-global.pure-db.com/"
+    searches:
+      - name: example_search
+        url: "https://uma-global.pure-db.com/?q=EXACT_QUERY"
