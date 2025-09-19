@@ -1,6 +1,6 @@
 sites:
   - id: uma_global
-    scraper: uma_global
+    source_site: uma_global
     base_url: "https://uma-global.pure-db.com/"
     searches:
       - name: example_search
