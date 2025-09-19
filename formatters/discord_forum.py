@@ -56,7 +56,7 @@ def make_title_and_body(r: Dict) -> Tuple[str, str]:
     title_parts = [trainer_id]
     if sparks:
         title_parts.append(sparks)
-    title_parts.append(f"White {white_count} • G1 {g1_count}")
+    title_parts.append(f"White {white_count} | G1 {g1_count}")
     title = " — ".join(title_parts)
 
     # Body: exactly four lines, then the profile link
