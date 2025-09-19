@@ -14,11 +14,11 @@ def run_once(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
     sites_cfg = load_yaml(sites_cfg_path)
     outputs_cfg = load_yaml(outputs_cfg_path)
 
-    # For now: call each configured scraper, but only take the FIRST record overall.
+    # For now: call each configured source_site, but only take the FIRST record overall.
     for site in sites_cfg.get("sites", []):
-        scraper_mod = importlib.import_module(f"scrapers.{site['scraper']}")  # e.g., scrapers.uma_global
+        source_site_mod = importlib.import_module(f"source_sites.{site['source_site']}")  # e.g., source_sites.uma_global
         for search in site.get("searches", []):
-            records = scraper_mod.scrape(search)
+            records = source_site_mod.scrape(search)
             if not records:
                 continue
             r = records[0]  # placeholder: first result only
