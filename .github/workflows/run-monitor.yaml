@@ -5,17 +5,10 @@ on:
     inputs:
       dry_run:        { type: boolean, default: false } # if true, creates a log that it would have posted
       sites_path:     { type: string,  required: false }
-      environment_name: { type: string, required: false }  # NEW: pass "Staging" or "Prod"
-      tool_repo:      { type: string,  required: false }
-      tool_ref:       { type: string,  required: false, default: "main" }
-    # Make the secret OPTIONAL so this works both:
-    # - in *your* repo (env secrets on the called job)
-    # - in *others’* repos (caller passes their secret)
+      environment_name: { type: string, required: true }  # NEW: pass "Staging" or "Prod"
     secrets:
-      ENV_DISCORD_WEBHOOK: { required: false }
-    # secrets: # uses repo secrets, pair with workflow that calls this
-    #   DISCORD_WEBHOOK_MAIN:
-    #     required: true
+      ENV_DISCORD_WEBHOOK:
+        required: true
 
 jobs:
   run:
@@ -26,33 +19,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout tool repo (if external)
-        if: ${{ inputs.tool_repo != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.tool_repo }}
-          ref: ${{ inputs.tool_ref }}
-          path: tool
-
-      - name: Resolve TOOL_DIR
-        id: tool
-        run: |
-          if [ -n "${{ inputs.tool_repo }}" ]; then echo "dir=tool" >> "$GITHUB_OUTPUT"; else echo "dir=." >> "$GITHUB_OUTPUT"; fi
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r "${{ steps.tool.outputs.dir }}/requirements.txt"
+          pip install -r requirements.txt
 
-      - name: Prepare sites config (inline > path > default)
+      - name: Prepare sites config (path > default)
         id: cfg
         run: |
           if [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
             cp "${{ inputs.sites_path }}" sites.effective.yaml
           else
-            cp "${{ steps.tool.outputs.dir }}/config/sites.yaml" sites.effective.yaml
+            cp config/sites.yaml sites.effective.yaml
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
+
+      # --- PROBE & MAP ENV SECRET ---
+      - name: Probe ENV_DISCORD_WEBHOOK and map to DISCORD_WEBHOOK_MAIN
+        run: |
+          echo "environment_name=${{ inputs.environment_name }}"
+          if [ -z "${{ secrets.ENV_DISCORD_WEBHOOK }}" ]; then
+            echo "❌ ENV_DISCORD_WEBHOOK not visible on environment '${{ inputs.environment_name }}'"; exit 1;
+          fi
+          # Map to the name your plugin expects (from outputs.yaml -> webhook_env)
+          echo "DISCORD_WEBHOOK_MAIN=${{ secrets.ENV_DISCORD_WEBHOOK }}" >> "$GITHUB_ENV"
+          echo "✅ ENV_DISCORD_WEBHOOK detected and mapped"
 
       # - name: Restore state # No cache yet
       #   uses: actions/cache/restore@v4
@@ -63,10 +54,7 @@ jobs:
 
       - name: Run orchestrator
         env:
-          # This resolves to:
-          # - caller-provided secret (if external users pass one), OR
-          # - your repo's environment-scoped secret (because the job has `environment:`)
-          DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_MAIN: ${{ env.ENV_DISCORD_WEBHOOK  }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
