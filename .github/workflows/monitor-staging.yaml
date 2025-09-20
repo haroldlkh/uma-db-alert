@@ -6,13 +6,13 @@ on:
       dry_run:
         description: "Run without sending alerts (true/false)"
         required: false
-        default: "true"
+        default: "false"
 
 jobs:
   staging:
     uses: ./.github/workflows/run-monitor.yaml
     with:
-      dry_run: ${{ inputs.dry_run == 'false' }}
+      dry_run: ${{ inputs.dry_run }}
       environment_name: "Staging"   # passes the env name to the called job
     secrets:
       DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
