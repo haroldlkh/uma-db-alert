@@ -3,7 +3,7 @@ name: Run UMA Monitor (reusable)
 on:
   workflow_call:
     inputs:
-      dry_run:        { type: boolean, default: true }
+      dry_run:        { type: boolean, default: false }
       sites_path:     { type: string,  required: false }
       environment_name: { type: string, required: false }  # NEW: pass "Staging" or "Prod"
       tool_repo:      { type: string,  required: false }
