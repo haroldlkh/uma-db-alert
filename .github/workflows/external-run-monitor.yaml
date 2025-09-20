@@ -8,7 +8,7 @@ on:
       tool_repo:      { type: string,  required: false }
       tool_ref:       { type: string,  required: false, default: "main" }
     secrets:
-      REPO_DISCORD_WEBHOOK: { required: true }
+      CALLER_DISCORD_WEBHOOK: { required: true }
 
 jobs:
   run:
@@ -53,7 +53,7 @@ jobs:
 
       - name: Run orchestrator
         env:
-          DISCORD_WEBHOOK_MAIN: ${{ env.REPO_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.CALLER_DISCORD_WEBHOOK }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi

@@ -34,15 +34,6 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      - name: Probe CALLER_DISCORD_WEBHOOK
-        run: |
-          echo "environment_name=${{ inputs.environment_name }}"
-          if [ -z "${{ secrets.CALLER_DISCORD_WEBHOOK }}" ]; then
-            echo "❌ CALLER_DISCORD_WEBHOOK NOT VISIBLE to the called job"; exit 1;
-          else
-            echo "✅ CALLER_DISCORD_WEBHOOK detected";
-          fi
-
       # - name: Restore state # No cache yet
       #   uses: actions/cache/restore@v4
       #   with:

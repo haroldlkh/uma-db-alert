@@ -18,3 +18,5 @@ jobs:
     with:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Prod"
+    secrets:
+      CALLER_DISCORD_WEBHOOK: ${{ secrets.PROD_DISCORD_WEBHOOK }}

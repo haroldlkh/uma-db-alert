@@ -1,0 +1,31 @@
+name: UMA External Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check to run without sending alerts"
+        type: boolean
+        required: false
+        default: "false"
+
+# for testing
+jobs:
+  staging:
+    uses: ./.github/workflows/run-monitor.yaml
+    with:
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      CALLER_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
+
+# example when finalising
+# jobs:
+#   run:
+#     uses: yourname/uma-db-alert/.github/workflows/run-monitor.yaml@v1
+#     with:
+#       dry_run: false
+#       sites_path: "config/sites.yaml"
+#       tool_repo: yourname/uma-db-alert
+#       tool_ref: v1
+#     secrets:
+#       DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}  # their secret
