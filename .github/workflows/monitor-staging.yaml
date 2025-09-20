@@ -15,5 +15,5 @@ jobs:
     with:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Staging"   # passes the env name to the called job
-    # secrets:
-    #   ENV_DISCORD_WEBHOOK: ${{ secrets.ENV_DISCORD_WEBHOOK }}
+    secrets:
+      CALLER_DISCORD_WEBHOOK: ${{ secrets.ENV_DISCORD_WEBHOOK }}
