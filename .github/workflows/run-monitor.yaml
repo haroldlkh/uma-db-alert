@@ -12,7 +12,7 @@ on:
     # - in *your* repo (env secrets on the called job)
     # - in *others’* repos (caller passes their secret)
     secrets:
-      REPO_DISCORD_WEBHOOK: { required: false }
+      ENV_DISCORD_WEBHOOK: { required: false }
     # secrets: # uses repo secrets, pair with workflow that calls this
     #   DISCORD_WEBHOOK_MAIN:
     #     required: true
@@ -25,23 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Select webhook source
-        id: sel
-        env:
-          S_ENV:  ${{ secrets.ENV_DISCORD_WEBHOOK }}     # from bound environment (optional)
-          S_REPO: ${{ secrets.REPO_DISCORD_WEBHOOK }}    # caller-passed (optional)
-        run: |
-          if [ -n "$S_ENV" ]; then
-            echo "source=environment" >> "$GITHUB_OUTPUT"
-            echo "DISCORD_WEBHOOK_MAIN=$S_ENV" >> "$GITHUB_ENV"
-          elif [ -n "$S_REPO" ]; then
-            echo "source=repo" >> "$GITHUB_OUTPUT"
-            echo "DISCORD_WEBHOOK_MAIN=$S_REPO" >> "$GITHUB_ENV"
-          else
-            echo "No webhook available: neither ENV_DISCORD_WEBHOOK nor REPO_DISCORD_WEBHOOK" >&2
-            exit 1
-          fi
 
       - name: Checkout tool repo (if external)
         if: ${{ inputs.tool_repo != '' }}
@@ -83,7 +66,7 @@ jobs:
           # This resolves to:
           # - caller-provided secret (if external users pass one), OR
           # - your repo's environment-scoped secret (because the job has `environment:`)
-          DISCORD_WEBHOOK_MAIN: ${{ env.DISCORD_WEBHOOK_MAIN }}
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
