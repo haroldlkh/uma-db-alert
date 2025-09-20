@@ -2,60 +2,20 @@ name: UMA Monitor (Prod)
 
 on:
   schedule:
-    - cron: "0 * * * *"      # Change frequency as needed (UTC)
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Run without sending alerts (true/false). Leave blank to use default 'false'."
+        description: "Run without sending alerts (true/false)"
         required: false
-        default: ""
+        default: "false"
 
 jobs:
   prod:
-    # Scheduled runs only proceed when RUN_MONITOR == 'true'.
-    # Manual runs always proceed.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
-    runs-on: ubuntu-latest
     environment: Prod
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install -U pip
-          python -m pip install playwright requests pyyaml
-          python -m playwright install --with-deps chromium
-
-      - name: Restore state cache (Prod)
-        uses: actions/cache@v4
-        with:
-          path: ~/.uma_monitor
-          key: uma-state-prod
-
-      - name: Resolve dry-run setting
-        id: cfg
-        env:
-          INPUT_DRY: ${{ inputs.dry_run }}
-        run: |
-          # Default for prod is false unless manually overridden
-          DRY="${INPUT_DRY}"
-          if [ -z "$DRY" ]; then DRY="false"; fi
-          echo "dry=$DRY" >> "$GITHUB_OUTPUT"
-
-      - name: Run monitor
-        env:
-          DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
-        run: |
-          [ "${{ steps.cfg.outputs.dry }}" = "true" ] && DRY_FLAG="--dry-run" || DRY_FLAG=""
-          python uma_monitor.py \
-            --targets config/targets.yaml \
-            --filters config/filters.yaml \
-            --outputs config/outputs.yaml \
-            --headless \
-            --wait-ms 1500 \
-            $DRY_FLAG
+    uses: ./.github/workflows/run-monitor.yaml
+    with:
+      dry_run: ${{ inputs.dry_run == 'true' }}
+    secrets:
+      DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
