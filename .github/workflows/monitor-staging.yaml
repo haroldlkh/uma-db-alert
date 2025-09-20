@@ -11,8 +11,7 @@ on:
 jobs:
   staging:
     uses: ./.github/workflows/run-monitor.yaml
+    environment: Staging          # binds to your repo’s Staging env
     with:
       dry_run: ${{ inputs.dry_run == 'true' }}
-      environment_name: "Staging"   # passes the env name to the called job
-    # no `runs-on`, no `environment` here
-    # no secrets mapping needed; the called job reads your env secret
+    secrets: inherit               # forwards env secrets to the called workflow
