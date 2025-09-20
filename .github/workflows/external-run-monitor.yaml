@@ -12,9 +12,6 @@ on:
 
 jobs:
   run:
-    # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
-    # environment: ${{ inputs.environment_name }}
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,10 +53,7 @@ jobs:
 
       - name: Run orchestrator
         env:
-          # This resolves to:
-          # - caller-provided secret (if external users pass one), OR
-          # - your repo's environment-scoped secret (because the job has `environment:`)
-          DISCORD_WEBHOOK_MAIN: ${{ secret.REPO_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_MAIN: ${{ env.REPO_DISCORD_WEBHOOK }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
