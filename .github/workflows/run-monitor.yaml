@@ -18,7 +18,7 @@ on:
 jobs:
   run:
     # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
-    # environment: ${{ inputs.environment_name }}
+    environment: ${{ inputs.environment_name }}
 
     runs-on: ubuntu-latest
     steps:
