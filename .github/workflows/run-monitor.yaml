@@ -5,20 +5,20 @@ on:
     inputs:
       dry_run:        { type: boolean, default: false } # if true, creates a log that it would have posted
       sites_path:     { type: string,  required: false }
-      environment_name: { type: string, required: false }  # NEW: pass "Staging" or "Prod"
+      environment_name: { type: string, required: true }  # NEW: pass "Staging" or "Prod"
       tool_repo:      { type: string,  required: false }
       tool_ref:       { type: string,  required: false, default: "main" }
     # Make the secret OPTIONAL so this works both:
     # - in *your* repo (env secrets on the called job)
     # - in *others’* repos (caller passes their secret)
-    secrets:
+    secrets: # uses repo secrets, pair with workflow that calls this
       DISCORD_WEBHOOK_MAIN:
         required: true
 
 jobs:
   run:
     # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
-    # environment: ${{ inputs.environment_name }}
+    environment: ${{ inputs.environment_name }}
 
     runs-on: ubuntu-latest
     steps:
