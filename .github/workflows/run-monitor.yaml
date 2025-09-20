@@ -73,9 +73,9 @@ jobs:
             --outputs "${{ steps.tool.outputs.dir }}/config/outputs.yaml" \
             $DRY
 
-      - name: Save state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.uma_monitor
-          key: uma-state-v1-${{ github.run_id }}
+      # - name: Save state # No cache yet
+      #   if: always()
+      #   uses: actions/cache/save@v4
+      #   with:
+      #     path: ~/.uma_monitor
+      #     key: uma-state-v1-${{ github.run_id }}
