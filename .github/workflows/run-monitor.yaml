@@ -3,21 +3,27 @@ name: Run UMA Monitor (reusable)
 on:
   workflow_call:
     inputs:
-      dry_run: { type: boolean, default: true }
-      sites_path: { type: string, required: false }
-      tool_repo:  { type: string, required: false }   # only external callers set this
-      tool_ref:   { type: string, required: false, default: "main" }
+      dry_run:        { type: boolean, default: true }
+      sites_path:     { type: string,  required: false }
+      environment_name: { type: string, required: false }  # NEW: pass "Staging" or "Prod"
+      tool_repo:      { type: string,  required: false }
+      tool_ref:       { type: string,  required: false, default: "main" }
+    # Make the secret OPTIONAL so this works both:
+    # - in *your* repo (env secrets on the called job)
+    # - in *others’* repos (caller passes their secret)
     secrets:
-      DISCORD_WEBHOOK_MAIN: { required: true }
+      DISCORD_WEBHOOK_MAIN:
+        required: false
 
 jobs:
   run:
+    # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
+    environment: ${{ inputs.environment_name }}
+
     runs-on: ubuntu-latest
     steps:
-      # Caller repo (so sites_path works if provided)
       - uses: actions/checkout@v4
 
-      # If tool_repo is provided, checkout your tool repo into ./tool
       - name: Checkout tool repo (if external)
         if: ${{ inputs.tool_repo != '' }}
         uses: actions/checkout@v4
@@ -26,12 +32,10 @@ jobs:
           ref: ${{ inputs.tool_ref }}
           path: tool
 
-      # Decide where the tool code/configs live: '.' (same repo) or 'tool'
       - name: Resolve TOOL_DIR
         id: tool
         run: |
-          if [ -n "${{ inputs.tool_repo }}" ]; then echo "dir=tool" >> "$GITHUB_OUTPUT";
-          else echo "dir=." >> "$GITHUB_OUTPUT"; fi
+          if [ -n "${{ inputs.tool_repo }}" ]; then echo "dir=tool" >> "$GITHUB_OUTPUT"; else echo "dir=." >> "$GITHUB_OUTPUT"; fi
 
       - name: Install dependencies
         run: |
@@ -57,6 +61,9 @@ jobs:
 
       - name: Run orchestrator
         env:
+          # This resolves to:
+          # - caller-provided secret (if external users pass one), OR
+          # - your repo's environment-scoped secret (because the job has `environment:`)
           DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
         run: |
           DRY=""

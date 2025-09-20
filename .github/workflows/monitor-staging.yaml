@@ -10,12 +10,9 @@ on:
 
 jobs:
   staging:
-    # keep environment if you rely on env-scoped secrets/approvals
-    environment: Staging
     uses: ./.github/workflows/run-monitor.yaml
     with:
-      # convert the string input to boolean
       dry_run: ${{ inputs.dry_run == 'true' }}
-      # optional: sites_path: "config/sites.yaml"  # or omit to use your default
-    secrets:
-      DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+      environment_name: "Staging"   # passes the env name to the called job
+    # no `runs-on`, no `environment` here
+    # no secrets mapping needed; the called job reads your env secret
