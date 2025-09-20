@@ -8,7 +8,7 @@ on:
       tool_repo:      { type: string,  required: false }
       tool_ref:       { type: string,  required: false, default: "main" }
     secrets:
-      REPO_DISCORD_WEBHOOK: { required: ture }
+      REPO_DISCORD_WEBHOOK: { required: true }
 
 jobs:
   run:
