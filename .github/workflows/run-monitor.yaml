@@ -52,12 +52,12 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      - name: Restore state
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.uma_monitor
-          key: uma-state-v1-${{ github.run_id }}
-          restore-keys: uma-state-v1-
+      # - name: Restore state # No cache yet
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     path: ~/.uma_monitor
+      #     key: uma-state-v1-${{ github.run_id }}
+      #     restore-keys: uma-state-v1-
 
       - name: Run orchestrator
         env:
