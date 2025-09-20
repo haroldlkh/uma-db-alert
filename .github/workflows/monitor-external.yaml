@@ -1,0 +1,21 @@
+name: UMA External Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check to run without sending alerts"
+        type: boolean
+        required: false
+        default: "false"
+
+jobs:
+  staging:
+    uses: ./.github/workflows/run-monitor.yaml
+    with:
+      dry_run: ${{ inputs.dry_run }}
+      environment_name: "Staging"   # passes the env name to the called job
+    secrets:
+      REPO_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
+    # no `runs-on`, no `environment` here
+    # no secrets mapping needed; the called job reads your env secret
