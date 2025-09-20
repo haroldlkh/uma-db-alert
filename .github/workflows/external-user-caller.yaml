@@ -12,7 +12,7 @@ on:
 # for testing
 jobs:
   staging:
-    uses: ./.github/workflows/run-monitor.yaml
+    uses: ./.github/workflows/external-run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
     secrets:
