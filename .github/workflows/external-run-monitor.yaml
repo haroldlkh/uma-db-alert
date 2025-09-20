@@ -1,4 +1,4 @@
-name: Run UMA Monitor (reusable)
+name: Run External UMA Monitor (reusable)
 
 on:
   workflow_call:
