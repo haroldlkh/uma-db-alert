@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Run without sending alerts (true/false)"
+        description: "Check to run without sending alerts"
+        type: boolean
         required: false
         default: "false"
 
@@ -15,5 +16,5 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     uses: ./.github/workflows/run-monitor.yaml
     with:
-      dry_run: ${{ inputs.dry_run == 'true' }}
+      dry_run: ${{ inputs.dry_run }}
       environment_name: "Prod"
