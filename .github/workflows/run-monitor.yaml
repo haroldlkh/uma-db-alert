@@ -34,17 +34,6 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      # --- PROBE & MAP ENV SECRET ---
-      - name: Probe ENV_DISCORD_WEBHOOK and map to DISCORD_WEBHOOK_MAIN
-        run: |
-          echo "environment_name=${{ inputs.environment_name }}"
-          if [ -z "${{ secrets.ENV_DISCORD_WEBHOOK }}" ]; then
-            echo "❌ ENV_DISCORD_WEBHOOK not visible on environment '${{ inputs.environment_name }}'"; exit 1;
-          fi
-          # Map to the name your plugin expects (from outputs.yaml -> webhook_env)
-          echo "DISCORD_WEBHOOK_MAIN=${{ secrets.ENV_DISCORD_WEBHOOK }}" >> "$GITHUB_ENV"
-          echo "✅ ENV_DISCORD_WEBHOOK detected and mapped"
-
       # - name: Restore state # No cache yet
       #   uses: actions/cache/restore@v4
       #   with:
@@ -54,7 +43,7 @@ jobs:
 
       - name: Run orchestrator
         env:
-          DISCORD_WEBHOOK_MAIN: ${{ env.ENV_DISCORD_WEBHOOK  }}
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK  }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
