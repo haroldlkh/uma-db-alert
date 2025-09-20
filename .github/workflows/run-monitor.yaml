@@ -58,9 +58,9 @@ jobs:
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
-          python "${{ steps.tool.outputs.dir }}/orchestrator.py" \
+          python orchestrator.py \
             --sites "${{ steps.cfg.outputs.sites }}" \
-            --outputs "${{ steps.tool.outputs.dir }}/config/outputs.yaml" \
+            --outputs config/outputs.yaml \
             $DRY
 
       # - name: Save state # No cache yet
