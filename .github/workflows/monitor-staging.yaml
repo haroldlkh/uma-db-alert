@@ -5,6 +5,7 @@ on:
     inputs:
       dry_run:
         description: "Run without sending alerts (true/false)"
+        type: boolean
         required: false
         default: "false"
 
