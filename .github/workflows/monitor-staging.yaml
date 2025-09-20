@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Run without sending alerts (true/false)"
+        description: "Run without sending alerts (check for true)"
         type: boolean
         required: false
         default: "false"
