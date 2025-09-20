@@ -20,8 +20,13 @@ def run_once(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
         for search in site.get("searches", []):
             records = source_site_mod.scrape(search)
             if not records:
+                print("No records for search:", search.get("url"))
                 continue
-            r = records[0]  # placeholder: first result only
+            r = next((x for x in records if x.get("trainer_id") and x.get("id_url")), None)
+            if not r:
+                print("No valid records (missing trainer_id/id_url) for:", search.get("url"))
+                continue
+
             title, body = make_title_and_body(r)
             send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
             time.sleep(1.0)  # be polite to Discord
