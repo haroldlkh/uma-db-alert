@@ -51,7 +51,7 @@ jobs:
       #     restore-keys: uma-state-v1-
 
       - name: Run orchestrator
-        env:
+        with:
           DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK  }}
         run: |
           DRY=""
