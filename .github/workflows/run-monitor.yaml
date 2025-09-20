@@ -11,6 +11,9 @@ on:
     # Make the secret OPTIONAL so this works both:
     # - in *your* repo (env secrets on the called job)
     # - in *others’* repos (caller passes their secret)
+    secrets:
+      DISCORD_WEBHOOK_MAIN:
+        required: true
 
 jobs:
   run:
