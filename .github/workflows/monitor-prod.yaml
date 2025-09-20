@@ -14,7 +14,6 @@ jobs:
   prod:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     uses: ./.github/workflows/run-monitor.yaml
-    environment: Prod
     with:
       dry_run: ${{ inputs.dry_run == 'true' }}
-    secrets: inherit
+      environment_name: "Prod"
