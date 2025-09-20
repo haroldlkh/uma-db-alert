@@ -12,7 +12,7 @@ jobs:
   staging:
     uses: ./.github/workflows/run-monitor.yaml
     with:
-      dry_run: ${{ inputs.dry_run == 'true' }}
+      dry_run: ${{ inputs.dry_run == 'false' }}
       environment_name: "Staging"   # passes the env name to the called job
     secrets:
       DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
