@@ -15,7 +15,7 @@ jobs:
     with:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Staging"   # passes the env name to the called job
-    secrets: # uses repo secret
-      DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+    # secrets: # uses repo secret
+    #   DISCORD_WEBHOOK_MAIN: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
     # no `runs-on`, no `environment` here
     # no secrets mapping needed; the called job reads your env secret
