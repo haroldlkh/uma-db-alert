@@ -34,19 +34,17 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
+      - name: Cache Playwright browsers (optional)
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-pw-${{ hashFiles('requirements.txt') }}
-          restore-keys: ${{ runner.os }}-pw-
-      
-      - name: Install Playwright
-        uses: microsoft/playwright-github-action@v1
-        with:
-          with-deps: true
-          browsers: chromium
-          # by default it installs all browsers
+          key: ${{ runner.os }}-msplaywright-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-msplaywright-
+
+      - name: Install Playwright browsers (Chromium)
+        run: |
+          python -m playwright install chromium
 
       # - name: Restore state # No cache yet
       #   uses: actions/cache/restore@v4
