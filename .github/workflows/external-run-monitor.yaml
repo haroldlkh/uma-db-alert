@@ -1,0 +1,76 @@
+name: Run UMA Monitor (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:        { type: boolean, default: false } # if true, creates a log that it would have posted
+      sites_path:     { type: string,  required: false }
+      tool_repo:      { type: string,  required: false }
+      tool_ref:       { type: string,  required: false, default: "main" }
+    secrets:
+      REPO_DISCORD_WEBHOOK: { required: ture }
+
+jobs:
+  run:
+    # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
+    environment: ${{ inputs.environment_name }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout tool repo (if external)
+        if: ${{ inputs.tool_repo != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.tool_repo }}
+          ref: ${{ inputs.tool_ref }}
+          path: tool
+
+      - name: Resolve TOOL_DIR
+        id: tool
+        run: |
+          if [ -n "${{ inputs.tool_repo }}" ]; then echo "dir=tool" >> "$GITHUB_OUTPUT"; else echo "dir=." >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -r "${{ steps.tool.outputs.dir }}/requirements.txt"
+
+      - name: Prepare sites config (inline > path > default)
+        id: cfg
+        run: |
+          if [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
+            cp "${{ inputs.sites_path }}" sites.effective.yaml
+          else
+            cp "${{ steps.tool.outputs.dir }}/config/sites.yaml" sites.effective.yaml
+          fi
+          echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
+
+      # - name: Restore state # No cache yet
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     path: ~/.uma_monitor
+      #     key: uma-state-v1-${{ github.run_id }}
+      #     restore-keys: uma-state-v1-
+
+      - name: Run orchestrator
+        env:
+          # This resolves to:
+          # - caller-provided secret (if external users pass one), OR
+          # - your repo's environment-scoped secret (because the job has `environment:`)
+          DISCORD_WEBHOOK_MAIN: ${{ env.DISCORD_WEBHOOK_MAIN }}
+        run: |
+          DRY=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
+          python "${{ steps.tool.outputs.dir }}/orchestrator.py" \
+            --sites "${{ steps.cfg.outputs.sites }}" \
+            --outputs "${{ steps.tool.outputs.dir }}/config/outputs.yaml" \
+            $DRY
+
+      # - name: Save state # No cache yet
+      #   if: always()
+      #   uses: actions/cache/save@v4
+      #   with:
+      #     path: ~/.uma_monitor
+      #     key: uma-state-v1-${{ github.run_id }}

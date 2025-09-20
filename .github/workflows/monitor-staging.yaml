@@ -11,7 +11,7 @@ on:
 
 jobs:
   staging:
-    uses: ./.github/workflows/run-monitor.yaml
+    uses: ./.github/workflows/external-run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Staging"   # passes the env name to the called job
