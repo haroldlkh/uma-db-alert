@@ -3,62 +3,51 @@ name: Run UMA Monitor (reusable)
 on:
   workflow_call:
     inputs:
-      dry_run:
-        type: boolean
-        default: true
-      # Let callers supply search config path in their repo (e.g., config/sites.yaml)
-      sites_path:
-        type: string
-        required: false
-      # For external callers: which repo/ref has the tool code
-      tool_repo:
-        type: string
-        required: false
-      tool_ref:
-        type: string
-        required: false
-        default: "main"
+      dry_run: { type: boolean, default: true }
+      sites_path: { type: string, required: false }
+      tool_repo:  { type: string, required: false }   # only external callers set this
+      tool_ref:   { type: string, required: false, default: "main" }
     secrets:
-      DISCORD_WEBHOOK_MAIN:
-        required: true
+      DISCORD_WEBHOOK_MAIN: { required: true }
 
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
-      # 1) Checkout the CALLER repo (so sites_path works if provided)
+      # Caller repo (so sites_path works if provided)
       - uses: actions/checkout@v4
 
-      # 2) Checkout the TOOL repo that contains orchestrator/formatters/outputs
-      #    When YOU call this from your own repo, you can omit tool_repo
-      #    and this will just check out the same repo again under ./tool.
-      - name: Checkout tool repo
+      # If tool_repo is provided, checkout your tool repo into ./tool
+      - name: Checkout tool repo (if external)
+        if: ${{ inputs.tool_repo != '' }}
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.tool_repo || github.repository }}
+          repository: ${{ inputs.tool_repo }}
           ref: ${{ inputs.tool_ref }}
           path: tool
+
+      # Decide where the tool code/configs live: '.' (same repo) or 'tool'
+      - name: Resolve TOOL_DIR
+        id: tool
+        run: |
+          if [ -n "${{ inputs.tool_repo }}" ]; then echo "dir=tool" >> "$GITHUB_OUTPUT";
+          else echo "dir=." >> "$GITHUB_OUTPUT"; fi
 
       - name: Install dependencies
         run: |
           python -m pip install -U pip
-          pip install -r tool/requirements.txt
+          pip install -r "${{ steps.tool.outputs.dir }}/requirements.txt"
 
-      - name: Prepare sites config
+      - name: Prepare sites config (inline > path > default)
         id: cfg
-        shell: bash
         run: |
-          if [ -n "${{ inputs.sites_yaml }}" ]; then
-            printf "%s\n" "${{ inputs.sites_yaml }}" > sites.effective.yaml
-          elif [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
+          if [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
             cp "${{ inputs.sites_path }}" sites.effective.yaml
           else
-            cp tool/config/sites.yaml sites.effective.yaml
+            cp "${{ steps.tool.outputs.dir }}/config/sites.yaml" sites.effective.yaml
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      # Optional cache (simple rolling key)
       - name: Restore state
         uses: actions/cache/restore@v4
         with:
@@ -72,9 +61,9 @@ jobs:
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
-          python tool/orchestrator.py \
+          python "${{ steps.tool.outputs.dir }}/orchestrator.py" \
             --sites "${{ steps.cfg.outputs.sites }}" \
-            --outputs tool/config/outputs.yaml \
+            --outputs "${{ steps.tool.outputs.dir }}/config/outputs.yaml" \
             $DRY
 
       - name: Save state
