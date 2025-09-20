@@ -13,9 +13,7 @@ on:
 jobs:
   run:
     # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
-    environment: ${{ inputs.environment_name }}
-    env:
-      DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK }}
+    environment: Staging #${{ inputs.environment_name }}
 
     runs-on: ubuntu-latest
     steps:
@@ -53,8 +51,8 @@ jobs:
       #     restore-keys: uma-state-v1-
 
       - name: Run orchestrator
-        # env:
-        #   DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK }}
+        env:
+          DISCORD_WEBHOOK_MAIN: ${{ secrets.ENV_DISCORD_WEBHOOK }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
