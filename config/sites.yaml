@@ -5,3 +5,11 @@ sites:
     searches:
       - name: example_search
         url: "https://uma-global.pure-db.com/#/search?searchInfo=eyJwYXJ0bmVyX2NhcmRfaWRzIjpbXSwiZXhjbHVkZV90eXBlIjowLCJleGNsdWRlX2NhcmRfaWRzIjpbXSwic3VwcG9ydF9jYXJkIjp7ImlkIjowLCJsaW1pdF9icmVhayI6NH0sImJsdWVfZmFjdG9ycyI6W3siZ3JvdXBfaWQiOjIsIm51bSI6OSwic2VhcmNoX3R5cGUiOjAsImVuYWJsZWQiOnRydWV9XSwicmVkX2ZhY3RvcnMiOltdLCJncmVlbl9mYWN0b3JzIjpbXSwiY29tbW9uX2ZhY3RvcnMiOltdLCJyYWNlX2ZhY3RvcnMiOltdLCJzY2VuYXJpb19mYWN0b3JzIjpbXSwib3RoZXJfZmFjdG9ycyI6W10sInJhY2UiOnsid2luX2NvdW50IjowLCJnMV93aW5fY291bnQiOjB9LCJ3aGl0ZV9mYWN0b3IiOnsibnVtIjoiMTAiLCJzZWFyY2hfdHlwZSI6MX0sInNlYXJjaF9jb3VudCI6IjEwMCIsImV4Y2x1ZGVfZnVsbF9mb2xsb3dlcl91c2VyIjp0cnVlfQ%3D%3D"
+      
+        options:
+            preset: staging          # loads PRESETS['staging'] {headless, verbose, mode}
+            mode: first              # first | first_per_page | all
+            max_pages: 1             # 0 = all pages
+            headless: true           # false to watch it in a runner with GUI (local)
+            search_timeout_ms: 90000
+            settle_ms: 250
