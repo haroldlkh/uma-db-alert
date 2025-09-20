@@ -5,7 +5,7 @@ on:
     inputs:
       dry_run:        { type: boolean, default: true }
       sites_path:     { type: string,  required: false }
-      environment_name: { type: string, required: true }  # NEW: pass "Staging" or "Prod"
+      environment_name: { type: string, required: false }  # NEW: pass "Staging" or "Prod"
       tool_repo:      { type: string,  required: false }
       tool_ref:       { type: string,  required: false, default: "main" }
     # Make the secret OPTIONAL so this works both:

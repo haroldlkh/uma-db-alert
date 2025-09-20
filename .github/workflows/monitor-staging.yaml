@@ -13,6 +13,6 @@ jobs:
     uses: ./.github/workflows/run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run == 'true' }}
-      environment_name: "Staging"   # passes the env name to the called job
+      environment_name: Staging   # passes the env name to the called job
     # no `runs-on`, no `environment` here
     # no secrets mapping needed; the called job reads your env secret
