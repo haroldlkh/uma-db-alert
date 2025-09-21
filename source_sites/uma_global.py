@@ -162,28 +162,72 @@ def open_search(page: Page, url: str, *, timeout_ms: int, verbose: bool) -> bool
         _log(verbose, "no results in timeout")
         return False
 
-def go_next_page(page: Page, *, prev_first_href: str, verbose: bool, timeout_ms: int = 8000) -> bool:
+def go_next_page(page: Page, *, verbose: bool, timeout_ms: int = 10_000) -> bool:
+    """
+    Click the 'Next' pager ONLY. Returns True if we actually navigated to a new page.
+    Handles:
+      - no pagination bar (single page / no results)
+      - disabled next (last page)
+      - busy table refresh
+    """
     def first_href() -> str:
         a = page.locator("a[href*='#/user/']").first
         return a.get_attribute("href") or ""
-    
-    # numeric page button
-    for n in range(2, 10):
-        loc = page.locator(f"xpath=(//a[normalize-space(text())='{n}'])[last()]")
-        if loc.count() > 0 and loc.first.is_enabled():
-            before = first_href()
-            loc.first.click()
-            try:
-                page.wait_for_function(
-                    "(prev)=>{const a=document.querySelector(\"a[href*='#/user/']\");if(!a)return false;const h=a.getAttribute('href')||'';return prev?h!==prev:h.length>0;}",
-                    arg=before, timeout=timeout_ms,
-                )
-                after = first_href()
-                changed = (after != prev_first_href)
-                _log(verbose, f"goto page {n}, changed={changed}")
-                return changed
-            except PWTimeoutError:
-                pass
+
+    # If there is no pagination bar at all, we can't advance.
+    if page.locator("ul.pagination.b-pagination").count() == 0:
+        _log(verbose, "pagination bar not present")
+        return False
+
+    # If the 'Next' control is disabled (span, or li.page-item.disabled), stop.
+    next_disabled = page.locator(
+        "ul.pagination .page-item.disabled span[role='menuitem'][aria-label*='next' i]"
+    )
+    if next_disabled.count() > 0:
+        _log(verbose, "Next is disabled (last page)")
+        return False
+
+    # Normal case: Next is a button we can click.
+    next_btn = page.locator(
+        "ul.pagination .page-item button[role='menuitem'][aria-label*='next' i]"
+    ).first
+    if next_btn.count() == 0:
+        _log(verbose, "Next button not found")
+        return False
+
+    prev = first_href()
+    _log(verbose, f"clicking Next; prev_first_href={prev!r}")
+    next_btn.click()
+
+    # Wait for either:
+    #  - first result href changes, OR
+    #  - table finishes a refresh (aria-busy flips false) and first link exists/changes.
+    try:
+        page.wait_for_function(
+            """(prev) => {
+                const table = document.querySelector("table.b-table");
+                // changed first link?
+                const a = document.querySelector("a[href*='#/user/']");
+                const href = a ? (a.getAttribute('href') || '') : '';
+                if (href && href !== prev) return true;
+
+                // if table is busy, not ready yet
+                if (table && table.getAttribute('aria-busy') === 'true') return false;
+
+                // table claims not busy; ensure we at least have a link
+                return !!href && href !== prev;
+            }""",
+            arg=prev,
+            timeout=timeout_ms,
+        )
+    except PWTimeoutError:
+        _log(verbose, "Next click timed out without page change")
+        return False
+
+    new = first_href()
+    changed = (new != prev) and bool(new)
+    _log(verbose, f"Next result: changed={changed}, new_first_href={new!r}")
+    return changed
 
 # --------------------------- public entry point -------------------------------
 def scrape(search: Dict[str, Any]) -> List[Dict]:
