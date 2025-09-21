@@ -32,7 +32,6 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
                 send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
                 time.sleep(1.0)  # polite throttle to avoid rate limits
                 print("Posted trainer:", r["trainer_id"], "(dry_run=" + str(dry_run) + ")")
-            # return 0  # stop after first post for placeholder runs
     print("No placeholder records produced.")
 
 def main():
