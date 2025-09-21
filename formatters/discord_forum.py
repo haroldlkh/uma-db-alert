@@ -1,4 +1,5 @@
 from typing import Dict, Tuple, List
+import unicodedata
 import re
 
 # Minimal markdown escaping so chips render as literal text
@@ -15,26 +16,32 @@ def _escape_md(s: str) -> str:
     return s.translate(_MD_ESC)
 
 def _clean_ws(s: str) -> str:
-    """
-    Normalize whitespace:
-      - convert NBSP to normal space
-      - drop zero-width chars
-      - collapse runs of whitespace to single spaces
-      - trim ends
-    """
+    """Normalize unicode and fix spaces around punctuation/parentheses."""
     if not s:
         return ""
-    s = s.replace("\u00A0", " ")   # NBSP
-    s = s.replace("\u200B", "")    # zero-width space
-    s = s.replace("\uFEFF", "")    # BOM/ZWNBS
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    # 1) Unicode normalize: converts full-width chars to ASCII (（ → (), ） → ) etc.)
+    s = unicodedata.normalize("NFKC", s)
+
+    # 2) Remove NBSP & zero-widths
+    s = s.replace("\u00A0", " ").replace("\u200B", "").replace("\uFEFF", "")
+
+    # 3) Collapse whitespace
+    s = re.sub(r"\s+", " ", s)
+
+    # 4) No space just inside or before closing punctuation/brackets
+    #    "... Representative3 )" → "... Representative3)"
+    s = re.sub(r"\s+([)\]\},;:!?])", r"\1", s)
+    #    "( Representative2 )" → "(Representative2)"
+    s = re.sub(r"([(\[{])\s+", r"\1", s)
+    #    Remove space before comma
+    s = re.sub(r"\s+,", ",", s)
+
+    return s.strip()
 
 def _sanitize(s: str) -> str:
     return _escape_md(_clean_ws(s or ""))
 
-def _join(xs: List[str], sep: str = ", ") -> str:
-    """Join list items with a separator after sanitizing each token."""
+def _join(xs, sep=", "):
     tokens = [_sanitize(x) for x in xs if _clean_ws(x)]
     return sep.join(tokens)
 
