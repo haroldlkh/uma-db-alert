@@ -47,8 +47,8 @@ def _log(v: bool, *a):
 
 # “Card” = the result block for one profile
 CARD_XPATH = (
-  "//a[contains(@href,'#/user/')]/"
-  "ancestor::*[self::div or self::li][.//span[contains(@class,'factor')]][1]"
+  "//div[contains(@class,'white_factor_count')]/"
+  "ancestor::*[self::div or self::li][.//a[contains(@href,'#/user/')]][1]"
 )
 
 def find_result_cards(page: Page):
