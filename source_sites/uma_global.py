@@ -45,55 +45,64 @@ def _first_id_from_href(href: Optional[str]) -> Optional[str]:
 def _log(v: bool, *a): 
     if v: print("[uma_global]", *a)
 
-# “Card” = the result block for one profile
-CARD_XPATH = (
-  "//div[contains(@class,'white_factor_count')]/"
-  "ancestor::*[self::div or self::li][.//a[contains(@href,'#/user/')]][1]"
-)
+# One row = one result card
+ROW_XPATH = "//table[contains(@class,'b-table')]//tbody//tr[.//a[contains(@href,'#/user/')]]"
 
-def find_result_cards(page: Page):
-    return page.locator(f"xpath=({CARD_XPATH})")
+def find_result_cards(page):
+    # all rows that have a profile link
+    return page.locator(f"xpath=({ROW_XPATH})")
 
-def parse_card(ctx: Page, page: Page, *, verbose=False) -> Optional[Dict]:
+
+def parse_card(ctx, page, *, verbose=False):
+    # profile link from this row only
     link = ctx.locator("a[href*='#/user/']").first
-    if link.count() == 0: 
+    if link.count() == 0:
         return None
     href = link.get_attribute("href") or ""
     tid  = _first_id_from_href(href)
-    if not tid: 
+    if not tid:
         return None
     id_url = href if href.startswith("http") else f"https://uma-global.pure-db.com/#/user/{tid}"
 
-    # chips only inside this card
-    def chips(cls: str) -> List[str]:
-        try: raw = ctx.locator(f".{cls}").all_inner_texts()
-        except Exception: raw = []
-        return [t.strip() for t in raw if t and t.strip()]
+    # chips scoped to this row
+    def chips(cls: str):
+        try:
+            return [t.strip() for t in ctx.locator(f".{cls}").all_inner_texts() if t.strip()]
+        except Exception:
+            return []
 
-    # counts: prefer inside the card; fallback to page if absent
-    def count(sel: str) -> int:
-        for scope in (ctx, page):
-            try:
-                txt = scope.locator(sel).first.inner_text().strip()
-                m = re.search(r"(\d+)", txt.replace(",", ""))
-                return int(m.group(1)) if m else 0
-            except Exception:
-                continue
-        return 0
+    blue  = chips("factor1")
+    pink  = chips("factor2")
+    uniq  = chips("factor3")
+    white = chips("factor4")
 
-    rec = {
+    # counts:
+    white_count = len(white)  # reliable within the row
+
+    # grab "G1 Win countNN" text from within the row
+    g1_count = 0
+    try:
+        node = ctx.locator("xpath=.//*[contains(normalize-space(.), 'G1 Win count')]").first
+        if node.count() > 0:
+            txt = node.inner_text().strip()
+            m = re.search(r"(\d+)", txt.replace(",", ""))
+            if m: g1_count = int(m.group(1))
+    except Exception:
+        pass
+
+    _log(verbose, f"row id={tid} blue={len(blue)} pink={len(pink)} uniq={len(uniq)} white={len(white)} g1={g1_count}")
+
+    return {
         "site_id": "uma_global",
         "trainer_id": tid,
         "id_url": id_url,
-        "blue_list":   chips("factor1"),
-        "pink_list":   chips("factor2"),
-        "unique_list": chips("factor3"),
-        "white_list":  chips("factor4"),
-        "white_count": count(".white_factor_count"),
-        "g1_count":    count(".g1_win_count"),
+        "blue_list":   blue,
+        "pink_list":   pink,
+        "unique_list": uniq,
+        "white_list":  white,
+        "white_count": white_count,
+        "g1_count":    g1_count,
     }
-    _log(verbose, f"card id={tid} blue={len(rec['blue_list'])} pink={len(rec['pink_list'])} uniq={len(rec['unique_list'])} white={len(rec['white_list'])}")
-    return rec
 
 def collect_page_records(page: Page, mode: str, *, verbose=False) -> List[Dict]:
     cards = find_result_cards(page)
