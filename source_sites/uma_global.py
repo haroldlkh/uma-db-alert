@@ -252,12 +252,12 @@ def scrape(search: Dict[str, Any]) -> List[Dict]:
         # pagination if requested
         pages_seen = 1
         while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
-            if not go_next_page(page, prev_first_href=first_href, verbose=opts["verbose"]):
+            if not go_next_page(page, verbose=opts["verbose"]):   # ← remove prev_first_href
                 break
             page.wait_for_timeout(opts["settle_ms"])
-            first_href = page.locator("a[href*='#/user/']").first.get_attribute("href") or first_href
             pages_seen += 1
             out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
+
 
         ctx.close(); browser.close()
 
