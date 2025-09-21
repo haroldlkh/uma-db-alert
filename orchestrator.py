@@ -27,10 +27,11 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
                 print("No valid records (missing trainer_id/id_url) for:", search.get("url"))
                 continue
 
-            title, body = make_title_and_body(r)
-            send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
-            time.sleep(1.0)  # be polite to Discord
-            print("Posted placeholder for trainer:", r["trainer_id"], "(dry_run=" + str(dry_run) + ")")
+            for r in records:  # post every record from the page
+                title, body = make_title_and_body(r)
+                send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
+                time.sleep(1.0)  # polite throttle to avoid rate limits
+                print("Posted trainer:", r["trainer_id"], "(dry_run=" + str(dry_run) + ")")
             # return 0  # stop after first post for placeholder runs
     print("No placeholder records produced.")
 
