@@ -54,28 +54,10 @@ def find_result_cards(page):
 
 _WHITE_REP = re.compile(r"\(Representative\s*(\d+)\)", re.I)
 
-def _white_totals(white_items: list[str]) -> tuple[int, int, int]:
-    """
-    Return (white_total, skills_total, races_total) where:
-      - skills_total sums numbers in '(RepresentativeN)'
-      - races_total sums trailing numbers at the end of the chip text
-        (e.g. 'Tenno Sho (Spring)1' -> +1)
-    """
-    skills_total = 0
-    races_total  = 0
-    for s in white_items or []:
-        s = (s or "").strip()
-        if not s:
-            continue
-        m = _WHITE_REP.search(s)
-        if m:
-            skills_total += int(m.group(1))
-        else:
-            # trailing digits at end → race count
-            m2 = re.search(r"(\d+)$", s)
-            if m2:
-                races_total += int(m2.group(1))
-    return skills_total + races_total, skills_total, races_total
+def _count_white(white_items: list[str]) -> int:
+    # Count items that contain the word "Representative" (case-insensitive)
+    return sum(1 for s in (white_items or []) if "representative" in (s or "").lower())
+
 
 def parse_card(ctx, page, *, verbose=False):
     # profile link from this row only
@@ -98,10 +80,13 @@ def parse_card(ctx, page, *, verbose=False):
     blue  = chips("factor1")
     pink  = chips("factor2")
     uniq  = chips("factor3")
-    white = chips("factor4")
+    white_skills = chips("factor4")
+    white_races = chips("factor5")
+    white = white_skills + white_races
 
     # counts:
-    white_count, white_skills_count, white_races_count = _white_totals(white)
+    white_skills_count, white_races_count = _count_white(white_skills), _count_white(white_races)
+    white_count = white_skills_count + white_races_count
 
     # grab "G1 Win countNN" text from within the row
     g1_count = 0
