@@ -13,3 +13,8 @@ sites:
             headless: true           # false to watch it in a runner with GUI (local)
             search_timeout_ms: 90000
             settle_ms: 250
+            
+            # seen-records behavior
+            detect_updates: true   # compare (trainer_id, fingerprint(white_list))
+            bootstrap: true        # first run: record, do NOT post
+            per_run_max: 100        # safety cap
