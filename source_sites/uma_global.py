@@ -18,17 +18,16 @@ PRESETS = {
 }
 ALLOWED_KEYS = set(DEFAULTS.keys())
 
-def _merge_options(search: Dict[str, Any]) -> Dict[str, Any]:
+def merge_site_options(site_options: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge DEFAULTS <- PRESET <- site_options (filtered to keys this site understands)."""
     opts = dict(DEFAULTS)
-    # optional: search.options.preset
-    preset = (search.get("options") or {}).get("preset")
+    preset = (site_options or {}).get("preset")
     if preset in PRESETS:
         opts.update(PRESETS[preset])
-    # allow overrides in search.options and directly on search
-    for src in (search.get("options") or {}, search):
-        for k, v in src.items():
-            if k in ALLOWED_KEYS:
-                opts[k] = v
+    for k, v in (site_options or {}).items():
+        if k in ALLOWED_KEYS:
+            opts[k] = v
+    # normalize types
     opts["mode"] = str(opts["mode"]).lower()
     opts["max_pages"] = int(opts["max_pages"])
     opts["headless"] = bool(opts["headless"])
@@ -230,11 +229,8 @@ def go_next_page(page: Page, *, verbose: bool, timeout_ms: int = 10_000) -> bool
     return changed
 
 # --------------------------- public entry point -------------------------------
-def scrape(search: Dict[str, Any]) -> List[Dict]:
-    opts = _merge_options(search)
-    url  = search["url"]
+def scrape(url: str, opts: Dict[str, Any]) -> List[Dict]:
     out: List[Dict] = []
-
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=opts["headless"])
         ctx = browser.new_context()
@@ -244,23 +240,19 @@ def scrape(search: Dict[str, Any]) -> List[Dict]:
             ctx.close(); browser.close(); return []
 
         page.wait_for_timeout(opts["settle_ms"])
-
-        # collect from current page according to MODE
         out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
-        first_href = page.locator("a[href*='#/user/']").first.get_attribute("href") or ""
 
-        # pagination if requested
         pages_seen = 1
         while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
-            if not go_next_page(page, verbose=opts["verbose"]):   # ← remove prev_first_href
+            if not go_next_page(page, verbose=opts["verbose"]):
                 break
             page.wait_for_timeout(opts["settle_ms"])
             pages_seen += 1
             out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
 
-
         ctx.close(); browser.close()
 
-    # annotate source_url for each record
-    for r in out: r["source_url"] = url
+    for r in out:
+        r["site_id"] = "uma_global"
+        r["source_url"] = url
     return out

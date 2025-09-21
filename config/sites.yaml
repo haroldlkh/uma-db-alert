@@ -2,22 +2,23 @@ sites:
   - id: uma_global
     source_site: uma_global
     base_url: "https://uma-global.pure-db.com/"
+    options:
+      preset: staging            # optional; merged first if you use PRESETS
+      # scraping
+      mode: all                  # first | first_per_page | all
+      max_pages: 0               # 0 = all pages
+      headless: true
+      verbose: true
+      search_timeout_ms: 30000
+      settle_ms: 250
+      # seen-records
+      detect_updates: true
+      bootstrap: false           # set true once to seed, then flip back
+      per_run_max: 10000
+
     searches:
       - name: 9power_10white
         url: "https://uma-global.pure-db.com/#/search?searchInfo=eyJwYXJ0bmVyX2NhcmRfaWRzIjpbXSwiZXhjbHVkZV90eXBlIjowLCJleGNsdWRlX2NhcmRfaWRzIjpbXSwic3VwcG9ydF9jYXJkIjp7ImlkIjowLCJsaW1pdF9icmVhayI6NH0sImJsdWVfZmFjdG9ycyI6W3siZ3JvdXBfaWQiOjMsIm51bSI6OSwic2VhcmNoX3R5cGUiOjAsImVuYWJsZWQiOnRydWV9XSwicmVkX2ZhY3RvcnMiOltdLCJncmVlbl9mYWN0b3JzIjpbXSwiY29tbW9uX2ZhY3RvcnMiOltdLCJyYWNlX2ZhY3RvcnMiOltdLCJzY2VuYXJpb19mYWN0b3JzIjpbXSwib3RoZXJfZmFjdG9ycyI6W10sInJhY2UiOnsid2luX2NvdW50IjowLCJnMV93aW5fY291bnQiOjB9LCJ3aGl0ZV9mYWN0b3IiOnsibnVtIjoiMTAiLCJzZWFyY2hfdHlwZSI6MX0sInNlYXJjaF9jb3VudCI6IjEwMCIsImV4Y2x1ZGVfZnVsbF9mb2xsb3dlcl91c2VyIjp0cnVlfQ%3D%3D"
       
       - name: 9stamina_10white
         url: "https://uma-global.pure-db.com/#/search?searchInfo=eyJwYXJ0bmVyX2NhcmRfaWRzIjpbXSwiZXhjbHVkZV90eXBlIjowLCJleGNsdWRlX2NhcmRfaWRzIjpbXSwic3VwcG9ydF9jYXJkIjp7ImlkIjowLCJsaW1pdF9icmVhayI6NH0sImJsdWVfZmFjdG9ycyI6W3siZ3JvdXBfaWQiOjIsIm51bSI6OSwic2VhcmNoX3R5cGUiOjAsImVuYWJsZWQiOnRydWV9XSwicmVkX2ZhY3RvcnMiOltdLCJncmVlbl9mYWN0b3JzIjpbXSwiY29tbW9uX2ZhY3RvcnMiOltdLCJyYWNlX2ZhY3RvcnMiOltdLCJzY2VuYXJpb19mYWN0b3JzIjpbXSwib3RoZXJfZmFjdG9ycyI6W10sInJhY2UiOnsid2luX2NvdW50IjowLCJnMV93aW5fY291bnQiOjB9LCJ3aGl0ZV9mYWN0b3IiOnsibnVtIjoiMTAiLCJzZWFyY2hfdHlwZSI6MX0sInNlYXJjaF9jb3VudCI6IjEwMCIsImV4Y2x1ZGVfZnVsbF9mb2xsb3dlcl91c2VyIjp0cnVlfQ%3D%3D"
-      
-        options:
-            preset: staging          # loads PRESETS['staging'] {headless, verbose, mode}
-            mode: all              # first | first_per_page | all
-            max_pages: 0             # 0 = all pages
-            headless: true           # false to watch it in a runner with GUI (local)
-            search_timeout_ms: 90000
-            settle_ms: 250
-            
-            # seen-records behavior
-            detect_updates: true   # compare (trainer_id, fingerprint(white_list))
-            bootstrap: true        # first run: record, do NOT post
-            per_run_max: 100        # safety cap
