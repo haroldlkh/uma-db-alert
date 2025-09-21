@@ -166,7 +166,8 @@ def go_next_page(page: Page, *, prev_first_href: str, verbose: bool, timeout_ms:
     def first_href() -> str:
         a = page.locator("a[href*='#/user/']").first
         return a.get_attribute("href") or ""
-    # try numeric pages 2..9
+    
+    # numeric page button
     for n in range(2, 10):
         loc = page.locator(f"xpath=(//a[normalize-space(text())='{n}'])[last()]")
         if loc.count() > 0 and loc.first.is_enabled():
