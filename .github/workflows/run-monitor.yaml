@@ -3,18 +3,16 @@ name: Run UMA Monitor (reusable)
 on:
   workflow_call:
     inputs:
-      dry_run:        { type: boolean, default: false } # if true, creates a log that it would have posted
+      dry_run:        { type: boolean, default: false }
       sites_path:     { type: string,  required: false }
-      environment_name: { type: string, required: true }  # NEW: pass "Staging" or "Prod"
+      environment_name: { type: string, required: true }
     secrets:
       CALLER_DISCORD_WEBHOOK:
         required: true
 
 jobs:
   run:
-    # Apply the environment ON THE CALLED JOB so it can read env-scoped secrets
     environment: ${{ inputs.environment_name }}
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +32,32 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
+      # ---------- STATE CACHE (add these 3 steps) ----------
+      - name: Resolve state dir (per repo + environment)
+        id: st
+        shell: bash
+        run: |
+          REPO_NS="${GITHUB_REPOSITORY//\//_}"
+          ENV_NAME="${{ inputs.environment_name }}"
+          DIR="$HOME/.uma_monitor/$REPO_NS/$ENV_NAME"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          mkdir -p "$DIR"
+
+      - name: Restore state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
+          restore-keys: |
+            uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+
+      - name: Set state namespace env
+        run: |
+          echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
+          # optional: pin base dir (utils will append /state)
+          echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
+      # ------------------------------------------------------
+
       - name: Cache Playwright browsers (optional)
         uses: actions/cache@v4
         with:
@@ -43,15 +67,7 @@ jobs:
             ${{ runner.os }}-msplaywright-
 
       - name: Install Playwright browsers (Chromium)
-        run: |
-          python -m playwright install chromium
-
-      # - name: Restore state # No cache yet
-      #   uses: actions/cache/restore@v4
-      #   with:
-      #     path: ~/.uma_monitor
-      #     key: uma-state-v1-${{ github.run_id }}
-      #     restore-keys: uma-state-v1-
+        run: python -m playwright install chromium
 
       - name: Run orchestrator
         env:
@@ -64,9 +80,9 @@ jobs:
             --outputs config/outputs.yaml \
             $DRY
 
-      # - name: Save state # No cache yet
-      #   if: always()
-      #   uses: actions/cache/save@v4
-      #   with:
-      #     path: ~/.uma_monitor
-      #     key: uma-state-v1-${{ github.run_id }}
+      - name: Save state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
