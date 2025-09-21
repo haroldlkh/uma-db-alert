@@ -1,8 +1,7 @@
-# formatters/discord_forum.py
-
 from typing import Dict, Tuple, List
+import re
 
-# Discord can interpret *, _, ~, `, |, > etc. Escape minimally so chips render as literal text.
+# Minimal markdown escaping so chips render as literal text
 _MD_ESC = str.maketrans({
     "*": r"\*",
     "_": r"\_",
@@ -15,51 +14,65 @@ _MD_ESC = str.maketrans({
 def _escape_md(s: str) -> str:
     return s.translate(_MD_ESC)
 
-def _join(xs: List[str]) -> str:
-    return " | ".join(_escape_md(x.strip()) for x in xs if x and x.strip())
+def _clean_ws(s: str) -> str:
+    """
+    Normalize whitespace:
+      - convert NBSP to normal space
+      - drop zero-width chars
+      - collapse runs of whitespace to single spaces
+      - trim ends
+    """
+    if not s:
+        return ""
+    s = s.replace("\u00A0", " ")   # NBSP
+    s = s.replace("\u200B", "")    # zero-width space
+    s = s.replace("\uFEFF", "")    # BOM/ZWNBS
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def _sanitize(s: str) -> str:
+    return _escape_md(_clean_ws(s or ""))
+
+def _join(xs: List[str], sep: str = ", ") -> str:
+    """Join list items with a separator after sanitizing each token."""
+    tokens = [_sanitize(x) for x in xs if _clean_ws(x)]
+    return sep.join(tokens)
 
 def make_title_and_body(r: Dict) -> Tuple[str, str]:
     """
-    r is a dict produced by your scraper for ONE result, e.g.:
-      {
-        "trainer_id": "133102601857",
-        "blue_list":   ["Stamina9 (Representative3)"],
-        "pink_list":   ["Long6 (Representative2)"],
-        "unique_list": ["Blue Rose Closer2 (Representative2)", "Flowery☆Maneuver2 (Representative2)"],
-        "white_list":  ["Tail Held High2 (Representative2)", "Fighter1 (Representative1)", "..."],
-        "white_count": 15,
-        "g1_count": 13,
-        "id_url": "https://uma-global.pure-db.com/#/user/133102601857"
-      }
-
-    Returns:
-      (title, body)
+    Expected record fields:
+      trainer_id, blue_list, pink_list, unique_list, white_list, white_count, g1_count, id_url
     """
-    # Required fields (fail fast with a clear error)
     required = ["trainer_id", "blue_list", "pink_list", "unique_list",
                 "white_list", "white_count", "g1_count", "id_url"]
     missing = [k for k in required if k not in r]
     if missing:
         raise ValueError(f"Formatter missing fields: {missing}")
 
-    trainer_id = str(r["trainer_id"]).strip()
-    blue = _join(r.get("blue_list", []))      # keep “(RepresentativeX)” suffixes intact
-    pink = _join(r.get("pink_list", []))
-    uniq = _join(r.get("unique_list", []))
-    white = _join(r.get("white_list", []))
-    white_count = int(r.get("white_count", 0))
-    g1_count = int(r.get("g1_count", 0))
-    id_url = r["id_url"].strip()
+    trainer_id = _clean_ws(str(r["trainer_id"]))
 
-    # Title: trainer + blue/pink “as-is” + formatted White/G1 summary
-    sparks = " | ".join(x for x in [blue, pink] if x)
-    title_parts = [trainer_id]
+    blue  = _join(r.get("blue_list", []),  sep=", ")
+    pink  = _join(r.get("pink_list", []),  sep=", ")
+    uniq  = _join(r.get("unique_list", []), sep=", ")
+    white = _join(r.get("white_list", []), sep=", ")
+
+    white_count = int(r.get("white_count", 0))
+    g1_count    = int(r.get("g1_count", 0))
+    id_url      = _clean_ws(r.get("id_url", ""))
+
+    # Title: trainer id, then Blue/Pink combined (comma-separated), then White/G1 (comma)
+    name_bits: List[str] = []
+    if blue: name_bits.append(blue)
+    if pink: name_bits.append(pink)
+    sparks = ", ".join(name_bits)
+
+    title_parts: List[str] = [trainer_id]
     if sparks:
         title_parts.append(sparks)
-    title_parts.append(f"White {white_count} | G1 {g1_count}")
+    title_parts.append(f"White {white_count}, G1 {g1_count}")
     title = " — ".join(title_parts)
 
-    # Body: exactly four lines, then the profile link
+    # Body: all lists comma-separated (no pipes)
     body = (
         f"Blue:   {blue}\n"
         f"Pink:   {pink}\n"
