@@ -8,7 +8,7 @@ sites:
       
         options:
             preset: staging          # loads PRESETS['staging'] {headless, verbose, mode}
-            mode: first              # first | first_per_page | all
+            mode: all              # first | first_per_page | all
             max_pages: 1             # 0 = all pages
             headless: true           # false to watch it in a runner with GUI (local)
             search_timeout_ms: 90000
