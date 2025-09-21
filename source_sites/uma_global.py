@@ -1,78 +1,119 @@
-# source_sites/uma_global.py
 from __future__ import annotations
 import re
-from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError, Page
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Switches in ONE place (defaults & presets). Override in sites.yaml.
+# ---------------------- switches live in config only --------------------------
 DEFAULTS = {
-    "mode": "first",            # 'first' | 'first_per_page' | 'all' (all = placeholder)
+    "mode": "first",            # 'first' | 'first_per_page' | 'all'
     "max_pages": 1,             # 0 = all pages
     "headless": True,
-    "search_timeout_ms": 90_000,  # slow first Search
-    "settle_ms": 250,
     "verbose": False,
+    "search_timeout_ms": 90_000,
+    "settle_ms": 250,
 }
-
 PRESETS = {
     "staging": { "headless": True,  "mode": "first", "verbose": True },
     "prod":    { "headless": True,  "mode": "first", "verbose": False },
 }
+ALLOWED_KEYS = set(DEFAULTS.keys())
 
-ALLOWED_KEYS = set(DEFAULTS.keys())  # only these may override
+def _merge_options(search: Dict[str, Any]) -> Dict[str, Any]:
+    opts = dict(DEFAULTS)
+    # optional: search.options.preset
+    preset = (search.get("options") or {}).get("preset")
+    if preset in PRESETS:
+        opts.update(PRESETS[preset])
+    # allow overrides in search.options and directly on search
+    for src in (search.get("options") or {}, search):
+        for k, v in src.items():
+            if k in ALLOWED_KEYS:
+                opts[k] = v
+    opts["mode"] = str(opts["mode"]).lower()
+    opts["max_pages"] = int(opts["max_pages"])
+    opts["headless"] = bool(opts["headless"])
+    opts["verbose"] = bool(opts["verbose"])
+    return opts
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Small helpers
-
-_ID_RE = re.compile(r"(\d{6,})")  # trainer ids are long digit runs
-
+# ----------------------------- DOM helpers -----------------------------------
+_ID_RE = re.compile(r"(\d{6,})")
 def _first_id_from_href(href: Optional[str]) -> Optional[str]:
-    if not href:
-        return None
+    if not href: return None
     m = _ID_RE.search(href)
     return m.group(1) if m else None
 
-def _log(enabled: bool, *args):
-    if enabled:
-        print("[uma_global]", *args)
+def _log(v: bool, *a): 
+    if v: print("[uma_global]", *a)
 
-def _merge_options(search: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Merge DEFAULTS <- optional preset <- per-search overrides.
-    In sites.yaml you can do:
-      options: { preset: staging, mode: first_per_page, headless: false, max_pages: 3 }
-    or directly on the search entry.
-    """
-    # allow site-level "options" block (the orchestrator passes search only; we still support search['options'])
-    opts = dict(DEFAULTS)
-    preset_name = None
-    for src in (search.get("options") or {}, search):  # search.options first, then search
-        if "preset" in src:
-            preset_name = src["preset"]
-    if preset_name and preset_name in PRESETS:
-        opts.update(PRESETS[preset_name])
-    # explicit overrides
-    for k, v in (search.get("options") or {}).items():
-        if k in ALLOWED_KEYS:
-            opts[k] = v
-    for k, v in search.items():
-        if k in ALLOWED_KEYS:
-            opts[k] = v
-    # coerce types
-    opts["max_pages"] = int(opts.get("max_pages", 1))
-    opts["headless"] = bool(opts.get("headless", True))
-    opts["verbose"]  = bool(opts.get("verbose", False))
-    opts["mode"]     = str(opts.get("mode", "first")).lower()
-    return opts
+# “Card” = the result block for one profile
+CARD_XPATH = (
+  "//a[contains(@href,'#/user/')]/"
+  "ancestor::*[self::div or self::li][.//span[contains(@class,'factor')]][1]"
+)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1) Open & trigger the search (long wait only here)
+def find_result_cards(page: Page):
+    return page.locator(f"xpath=({CARD_XPATH})")
+
+def parse_card(ctx: Page, page: Page, *, verbose=False) -> Optional[Dict]:
+    link = ctx.locator("a[href*='#/user/']").first
+    if link.count() == 0: 
+        return None
+    href = link.get_attribute("href") or ""
+    tid  = _first_id_from_href(href)
+    if not tid: 
+        return None
+    id_url = href if href.startswith("http") else f"https://uma-global.pure-db.com/#/user/{tid}"
+
+    # chips only inside this card
+    def chips(cls: str) -> List[str]:
+        try: raw = ctx.locator(f".{cls}").all_inner_texts()
+        except Exception: raw = []
+        return [t.strip() for t in raw if t and t.strip()]
+
+    # counts: prefer inside the card; fallback to page if absent
+    def count(sel: str) -> int:
+        for scope in (ctx, page):
+            try:
+                txt = scope.locator(sel).first.inner_text().strip()
+                m = re.search(r"(\d+)", txt.replace(",", ""))
+                return int(m.group(1)) if m else 0
+            except Exception:
+                continue
+        return 0
+
+    rec = {
+        "site_id": "uma_global",
+        "trainer_id": tid,
+        "id_url": id_url,
+        "blue_list":   chips("factor1"),
+        "pink_list":   chips("factor2"),
+        "unique_list": chips("factor3"),
+        "white_list":  chips("factor4"),
+        "white_count": count(".white_factor_count"),
+        "g1_count":    count(".g1_win_count"),
+    }
+    _log(verbose, f"card id={tid} blue={len(rec['blue_list'])} pink={len(rec['pink_list'])} uniq={len(rec['unique_list'])} white={len(rec['white_list'])}")
+    return rec
+
+def collect_page_records(page: Page, mode: str, *, verbose=False) -> List[Dict]:
+    cards = find_result_cards(page)
+    n = cards.count()
+    if n == 0:
+        _log(verbose, "no cards on page")
+        return []
+    if mode == "first":
+        rec = parse_card(cards.first, page, verbose=verbose)
+        return [rec] if rec else []
+    # mode = first_per_page or all (for now both mean “one record per card”)
+    out: List[Dict] = []
+    for i in range(n):
+        rec = parse_card(cards.nth(i), page, verbose=verbose)
+        if rec: out.append(rec)
+    return out
+
+# -------------------------- navigation/search --------------------------------
 def open_search(page: Page, url: str, *, timeout_ms: int, verbose: bool) -> bool:
     page.goto(url, wait_until="domcontentloaded")
-
-    # click Search (several fallbacks)
     clicked = False
     for loc in (
         lambda: page.get_by_role("button", name="Search"),
@@ -84,127 +125,46 @@ def open_search(page: Page, url: str, *, timeout_ms: int, verbose: bool) -> bool
             btn = loc()
             if btn and btn.first.is_visible():
                 btn.first.click(); clicked = True; break
-        except Exception:
-            pass
+        except Exception: pass
     if not clicked:
-        try:
-            page.locator("button").first.click(); clicked = True
-        except Exception:
-            pass
-
+        try: page.locator("button").first.click()
+        except Exception: pass
     _log(verbose, "clicked Search:", clicked)
-
     try:
         page.wait_for_function(
-            """() => document.querySelectorAll("a[href*='#/user/']").length > 0""",
+            "()=>document.querySelectorAll(\"a[href*='#/user/']\").length>0",
             timeout=timeout_ms,
         )
-        _log(verbose, "first results detected")
+        _log(verbose, "results appeared")
         return True
     except PWTimeoutError:
-        _log(verbose, "no results within timeout")
+        _log(verbose, "no results in timeout")
         return False
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 2) Scrape current page (first result only for now)
-def _parse_chips_and_counts(page: Page, verbose: bool) -> Dict[str, Any]:
-    """
-    Placeholder parser. Keep structure stable; fill later.
-    """
-    def grab_list(cls: str) -> List[str]:
-        try:
-            return [t.strip() for t in page.locator(f".{cls}").all_inner_texts() if t.strip()]
-        except Exception:
-            return []
-    def grab_count(sel: str) -> int:
-        try:
-            txt = page.locator(sel).first.inner_text().strip()
-        except Exception:
-            return 0
-        m = re.search(r"(\d+)", txt.replace(",", ""))
-        return int(m.group(1)) if m else 0
-
-    blue  = grab_list("factor1")
-    pink  = grab_list("factor2")
-    uniq  = grab_list("factor3")
-    white = grab_list("factor4")
-    white_count = grab_count(".white_factor_count")
-    g1_count    = grab_count(".g1_win_count")
-
-    _log(verbose, f"chips: blue={len(blue)} pink={len(pink)} unique={len(uniq)} white={len(white)} wc={white_count} g1={g1_count}")
-    return {
-        "blue_list": blue, "pink_list": pink, "unique_list": uniq, "white_list": white,
-        "white_count": white_count, "g1_count": g1_count
-    }
-
-def scrape_page_first(page: Page, *, verbose: bool) -> Optional[Dict]:
-    link = page.locator("a[href*='#/user/']").first
-    if link.count() == 0:
-        _log(verbose, "no user link on page")
-        return None
-
-    href = link.get_attribute("href")
-    tid  = _first_id_from_href(href or "")
-    if not tid:
-        _log(verbose, "could not parse trainer id from href:", href)
-        return None
-
-    id_url = href if (href and href.startswith("http")) else f"https://uma-global.pure-db.com/#/user/{tid}"
-    meta = _parse_chips_and_counts(page, verbose)
-
-    rec = {
-        "site_id": "uma_global",
-        "trainer_id": tid,
-        "id_url": id_url,
-        **meta,
-    }
-    _log(verbose, "first record:", tid)
-    return rec
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 3) Try go to next page; True only if first result actually changes
 def go_next_page(page: Page, *, prev_first_href: str, verbose: bool, timeout_ms: int = 8000) -> bool:
-    def current_first_href() -> str:
+    def first_href() -> str:
         a = page.locator("a[href*='#/user/']").first
         return a.get_attribute("href") or ""
-
-    # Prefer numbered page N = current+1 (loose heuristic: try clicking 2..9 if visible)
+    # try numeric pages 2..9
     for n in range(2, 10):
         loc = page.locator(f"xpath=(//a[normalize-space(text())='{n}'])[last()]")
         if loc.count() > 0 and loc.first.is_enabled():
-            before = current_first_href()
+            before = first_href()
             loc.first.click()
             try:
                 page.wait_for_function(
-                    """(prev) => {
-                        const a = document.querySelector("a[href*='#/user/']");
-                        if (!a) return false;
-                        const href = a.getAttribute('href') || '';
-                        return prev ? href !== prev : href.length > 0;
-                    }""",
-                    arg=before,
-                    timeout=timeout_ms,
+                    "(prev)=>{const a=document.querySelector(\"a[href*='#/user/']\");if(!a)return false;const h=a.getAttribute('href')||'';return prev?h!==prev:h.length>0;}",
+                    arg=before, timeout=timeout_ms,
                 )
-                after = current_first_href()
+                after = first_href()
                 changed = (after != prev_first_href)
-                _log(verbose, f"clicked page {n}, changed={changed}")
+                _log(verbose, f"goto page {n}, changed={changed}")
                 return changed
             except PWTimeoutError:
                 pass
-            
-    _log(verbose, "no pager control found")
-    return False
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Public entry point: mini-orchestrator for this site
+# --------------------------- public entry point -------------------------------
 def scrape(search: Dict[str, Any]) -> List[Dict]:
-    """
-    Uses options from DEFAULTS/PRESETS with per-search overrides.
-    Modes:
-      - 'first':          only first page's first record
-      - 'first_per_page': first record from each page (up to max_pages/0=all)
-      - 'all':            placeholder for future: all items per page
-    """
     opts = _merge_options(search)
     url  = search["url"]
     out: List[Dict] = []
@@ -219,38 +179,22 @@ def scrape(search: Dict[str, Any]) -> List[Dict]:
 
         page.wait_for_timeout(opts["settle_ms"])
 
-        # Page 1
-        rec = scrape_page_first(page, verbose=opts["verbose"])
-        if rec:
-            rec["source_url"] = url
-            out.append(rec)
-        else:
-            _log(opts["verbose"], "page 1 had no parsable first record")
-
-        # Early exit for mode='first'
-        if opts["mode"] == "first":
-            ctx.close(); browser.close(); return out
-
-        # Otherwise loop pages
-        pages_seen = 1
+        # collect from current page according to MODE
+        out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
         first_href = page.locator("a[href*='#/user/']").first.get_attribute("href") or ""
 
+        # pagination if requested
+        pages_seen = 1
         while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
-            moved = go_next_page(page, prev_first_href=first_href, verbose=opts["verbose"])
-            if not moved:
+            if not go_next_page(page, prev_first_href=first_href, verbose=opts["verbose"]):
                 break
             page.wait_for_timeout(opts["settle_ms"])
             first_href = page.locator("a[href*='#/user/']").first.get_attribute("href") or first_href
             pages_seen += 1
-
-            if opts["mode"] in ("first_per_page", "all"):
-                rec = scrape_page_first(page, verbose=opts["verbose"])  # for 'all', replace later
-                if rec:
-                    rec["source_url"] = url
-                    out.append(rec)
-                else:
-                    _log(opts["verbose"], f"page {pages_seen} had no parsable first record")
+            out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
 
         ctx.close(); browser.close()
 
+    # annotate source_url for each record
+    for r in out: r["source_url"] = url
     return out
