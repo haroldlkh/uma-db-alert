@@ -52,6 +52,30 @@ def find_result_cards(page):
     # all rows that have a profile link
     return page.locator(f"xpath=({ROW_XPATH})")
 
+_WHITE_REP = re.compile(r"\(Representative\s*(\d+)\)", re.I)
+
+def _white_totals(white_items: list[str]) -> tuple[int, int, int]:
+    """
+    Return (white_total, skills_total, races_total) where:
+      - skills_total sums numbers in '(RepresentativeN)'
+      - races_total sums trailing numbers at the end of the chip text
+        (e.g. 'Tenno Sho (Spring)1' -> +1)
+    """
+    skills_total = 0
+    races_total  = 0
+    for s in white_items or []:
+        s = (s or "").strip()
+        if not s:
+            continue
+        m = _WHITE_REP.search(s)
+        if m:
+            skills_total += int(m.group(1))
+        else:
+            # trailing digits at end → race count
+            m2 = re.search(r"(\d+)$", s)
+            if m2:
+                races_total += int(m2.group(1))
+    return skills_total + races_total, skills_total, races_total
 
 def parse_card(ctx, page, *, verbose=False):
     # profile link from this row only
@@ -77,16 +101,19 @@ def parse_card(ctx, page, *, verbose=False):
     white = chips("factor4")
 
     # counts:
-    white_count = len(white)  # reliable within the row
+    white_count, white_skills_count, white_races_count = _white_totals(white)
 
     # grab "G1 Win countNN" text from within the row
     g1_count = 0
     try:
-        node = ctx.locator("xpath=.//*[contains(normalize-space(.), 'G1 Win count')]").first
-        if node.count() > 0:
-            txt = node.inner_text().strip()
-            m = re.search(r"(\d+)", txt.replace(",", ""))
-            if m: g1_count = int(m.group(1))
+        g1_node = ctx.locator(".g1_win_count").first  # e.g., <div class="g1_win_count text_black">G1 Win count13</div>
+        if g1_node.count() > 0:
+            txt = g1_node.inner_text().strip()
+            m = re.search(r'(\d+)$', txt)  # capture the trailing number (13)
+            if not m:
+                m = re.search(r'G1\s*Win\s*count\s*(\d+)', txt, re.I)
+            if m:
+                g1_count = int(m.group(1))
     except Exception:
         pass
 
