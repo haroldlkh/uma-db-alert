@@ -1,6 +1,0 @@
-targets:
-  - name: example_search
-    url: "https://uma-global.pure-db.com/?q=EXACT_QUERY"
-    selector: ".result"
-    next_selector: 'a[rel="next"], a[aria-label="Next"], .page-link[rel="next"]'
-    max_pages: 0        # 0 = all pages
