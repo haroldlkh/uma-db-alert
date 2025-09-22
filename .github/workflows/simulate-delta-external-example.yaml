@@ -1,0 +1,138 @@
+name: Simulate UMA Delta (test external repo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: "Env label used for state (external repos usually use 'repo')"
+        type: string
+        default: repo
+      simulate_search:
+        description: "Exact search name to target (blank = first search)"
+        type: string
+        required: false
+      simulate_count:
+        description: "How many IDs to re-emit for that search"
+        type: number
+        default: 1
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve state dir (per repo + environment)
+        id: st
+        shell: bash
+        run: |
+          REPO_NS="${GITHUB_REPOSITORY//\//_}"
+          ENV_NAME="${{ inputs.environment_name }}"
+          DIR="$HOME/.uma_monitor/$REPO_NS/$ENV_NAME"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          mkdir -p "$DIR"
+
+      - name: Restore state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
+          restore-keys: |
+            uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+
+      - name: Match state namespace env
+        run: |
+          echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
+          echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
+
+      - name: Install YAML dependency
+        run: pip install pyyaml
+
+      - name: Edit state to force N deltas
+        run: |
+          python - <<'PY'
+          import os, json, yaml, glob
+          from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+          def canon_url(u: str) -> str:
+              u = (u or "").strip()
+              if not u: return ""
+              try:
+                  scheme, netloc, path, query, frag = urlsplit(u)
+                  scheme = (scheme or "").lower()
+                  netloc = (netloc or "").lower()
+                  if path.endswith("/") and len(path) > 1:
+                      path = path[:-1]
+                  if query:
+                      q = parse_qsl(query, keep_blank_values=True)
+                      q.sort()
+                      query = urlencode(q)
+                  frag = ""  # ignored in identity
+                  return urlunsplit((scheme, netloc, path, query, frag))
+              except Exception:
+                  return u.rstrip("/")
+
+          env  = os.environ["UMA_ENV_NAME"]
+          root = os.environ["UMA_STATE_DIR"]           # base; actual files are under root/state
+          state_dir = os.path.join(root, "state")
+
+          # Load caller's sites config (required in external repo)
+          cfg = yaml.safe_load(open("config/sites.yaml","r",encoding="utf-8")) or {}
+          sites = cfg.get("sites") or []
+          if not sites: raise SystemExit("No sites configured.")
+          site = sites[0]
+          src  = site["source_site"]
+          searches = site.get("searches") or []
+          if not searches: raise SystemExit("No searches configured.")
+
+          want = (os.environ.get("SIM_SEARCH") or "").strip()
+          idx = 0
+          if want:
+              for i,s in enumerate(searches):
+                  if (s.get("name") or "") == want:
+                      idx = i; break
+              else:
+                  raise SystemExit(f"Search name '{want}' not found. Available: " +
+                                   ", ".join([s.get('name') or f'search{i+1}' for i,s in enumerate(searches)]))
+
+          s   = searches[idx]
+          url = s["url"]
+          sid = s.get("id") or s.get("name") or f"search{idx+1}"
+          per_search_site_id = f"{src}::{sid}"
+          c_url = canon_url(url)
+
+          # Find the state file. Prefer per-search site_id match; fall back to search_url-only match.
+          picked = None
+          for f in sorted(glob.glob(os.path.join(state_dir, "*.json"))):
+              try:
+                  d = json.load(open(f,"r",encoding="utf-8"))
+              except Exception:
+                  continue
+              if d.get("site_id") == per_search_site_id and d.get("search_url") == c_url:
+                  picked = f; break
+          if not picked:
+              for f in sorted(glob.glob(os.path.join(state_dir, "*.json"))):
+                  try:
+                      d = json.load(open(f,"r",encoding="utf-8"))
+                  except Exception:
+                      continue
+                  if d.get("search_url") == c_url:
+                      picked = f; break
+
+          if not picked:
+              print(f"::notice::No seeded state found yet for '{sid}'. Run the monitor once, then re-run this.")
+              raise SystemExit(0)
+
+          n = max(0, int(os.environ.get("SIM_COUNT","1")))
+          data = json.load(open(picked,"r",encoding="utf-8"))
+          digs = data.get("digests") or {}
+          ids  = sorted(digs.keys())
+          if not ids:
+              print(f"::notice::State has no digests yet for '{sid}' (probably not seeded).")
+              raise SystemExit(0)
+
+          victims = ids[:n]
+          for vid in victims:
+              digs.pop(vid, None)
+          data["digests"] = digs
+          json
