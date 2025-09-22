@@ -54,30 +54,22 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
         site_opts_cfg = site.get("options") or {}
         eff_opts      = site_mod.merge_site_options(site_opts_cfg)  # once per site
 
-        for search in site.get("searches", []):
+        for idx, search in enumerate(site.get("searches", []), start=1):
             url = search["url"]
-            state_key = f"{url}||search={search.get('name','')}" 
+            state_site_id = f"{site['source_site']}::{search.get('name') or f'search{idx}'}"
             # You kept the name `scrape`, so call it with (url, eff_opts)
             records = site_mod.scrape(url, eff_opts)
             if not records:
                 print("No records for search:", url)
                 continue
 
-            # DEBUG: which state file & seeded?
-            spath = st.state_path(site['source_site'], url)
-            s0 = st.load(site['source_site'], url)
+            # DEBUG: which state file & seeded? (use per-search site id)
+            spath = st.state_path(state_site_id, url)
+            s0 = st.load(state_site_id, url)
             print(f"[debug] state_file={spath} seeded={s0.get('seeded')} seen={len(s0.get('digests',{}))}")
 
-            to_post = filter_new_or_changed(site['source_site'], state_key, eff_opts, records)
-            print(f"[state] site={site.get('id')} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
-            
-            # Use the per-search state key so newly added searches seed without posting
-            to_post = filter_new_or_changed(site['source_site'], state_key, eff_opts, records)
-
-            # (Optional debug)
-            spath = st.state_path(site['source_site'], state_key)
-            s0 = st.load(site['source_site'], state_key)
-            print(f"[debug] real_url={url} state_key={state_key} file={spath} seeded={s0.get('seeded')} seen={len(s0.get('digests',{}))}")
+            to_post = filter_new_or_changed(state_site_id, url, eff_opts, records)
+            print(f"[state] site={state_site_id} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
 
             for r in to_post:
                 title, body = make_title_and_body(r)
