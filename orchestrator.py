@@ -56,6 +56,7 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
 
         for search in site.get("searches", []):
             url = search["url"]
+            state_key = f"{url}||search={search.get('name','')}" 
             # You kept the name `scrape`, so call it with (url, eff_opts)
             records = site_mod.scrape(url, eff_opts)
             if not records:
@@ -69,6 +70,14 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
 
             to_post = filter_new_or_changed(site['source_site'], url, eff_opts, records)
             print(f"[state] site={site.get('id')} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
+            
+            # Use the per-search state key so newly added searches seed without posting
+            to_post = filter_new_or_changed(site['source_site'], state_key, eff_opts, records)
+
+            # (Optional debug)
+            spath = st.state_path(site['source_site'], state_key)
+            s0 = st.load(site['source_site'], state_key)
+            print(f"[debug] real_url={url} state_key={state_key} file={spath} seeded={s0.get('seeded')} seen={len(s0.get('digests',{}))}")
 
             for r in to_post:
                 title, body = make_title_and_body(r)
