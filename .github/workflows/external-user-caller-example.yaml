@@ -18,4 +18,4 @@
 #       sites_path: .github/uma/sites.yaml     # path INSIDE THIS REPO
 #       tool_ref: main                          # or a tag like v0.1
 #     secrets:
-#       REPO_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
+#       CALLER_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
