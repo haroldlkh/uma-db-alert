@@ -1,0 +1,21 @@
+# name: Example caller for other users
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       dry_run:
+#         description: "Run without posting"
+#         type: boolean
+#         default: true
+#   schedule:
+#     - cron: "0 * * * *"   # optional
+
+# jobs:
+#   monitor:
+#     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
+#     with:
+#       dry_run: ${{ inputs.dry_run }}
+#       sites_path: .github/uma/sites.yaml     # path INSIDE THIS REPO
+#       tool_ref: main                          # or a tag like v0.1
+#     secrets:
+#       REPO_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
