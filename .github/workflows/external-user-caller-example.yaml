@@ -1,26 +1,39 @@
-# name: Example caller for other users
+name: Example caller for other users
 
-# permissions:
-#   actions: write
-#   contents: read
+permissions:
+  actions: write   # allow deleting old caches
+  contents: read
 
-# on:
-#   workflow_dispatch: # for manual runs
-#     inputs:
-#       dry_run:
-#         description: "Check to run without posting"
-#         type: boolean
-#         default: false
-#   schedule:
-#     - cron: "0 * * * *"   # convert desired frequency to cron. Github max is every 5 minutes. At your own cost.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check to run without posting"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "*/6 * * * *"   # every 6 minutes
 
-# jobs:
-#   monitor:
-#     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
-#     with:
-#       dry_run: ${{ inputs.dry_run }}
-#       sites_path: config/sites.yaml     # list of searches on uma-global-db
-#       tool_ref: main
-#       outputs_profiles: "discord_forum" # only option available right now
-#     secrets:
-#       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
+jobs:
+  # Manual trigger: pass the input through
+  monitor_dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
+    with:
+      dry_run: ${{ inputs.dry_run }}
+      sites_path: config/sites.yaml
+      tool_ref: main
+      outputs_profiles: "discord_forum"
+    secrets:
+      CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
+
+  # Scheduled trigger: do NOT reference inputs.* (let reusable default dry_run=false)
+  monitor_schedule:
+    if: github.event_name == 'schedule'
+    uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
+    with:
+      sites_path: config/sites.yaml
+      tool_ref: main
+      outputs_profiles: "discord_forum"
+    secrets:
+      CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}

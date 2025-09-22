@@ -15,7 +15,12 @@ on:
 
 jobs:
   run:
+    # Let the caller control permissions; do NOT request any here to avoid “nested job requesting …” errors.
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: uma-monitor-${{ github.repository }}-${{ inputs.environment_name }}
+      cancel-in-progress: true
 
     env:
       # Only expose what selected outputs require; preflight enforces presence
@@ -72,6 +77,8 @@ jobs:
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
           restore-keys: |
             uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+            # fallback for very early runs that missed the env segment:
+            uma-state-${{ github.repository }}--v1-
 
       - name: Reset state dir (toggle)
         if: ${{ inputs.reset_state }}
@@ -165,22 +172,29 @@ jobs:
           path: ${{ steps.st.outputs.dir }}
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
 
-      # 10) (Optional) prune: keep newest 3; skips silently if no permission
+      # 10) (Optional) prune: keep newest 3; skips silently if caller didn't grant actions:write
       - name: Prune old UMA state caches (keep last 3)
-        if: always()
+        if: ${{ always() && inputs.prune_caches }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ENV:  ${{ inputs.environment_name }}
+        shell: bash
         run: |
           set -euo pipefail
           PREFIX="uma-state-${REPO}-${ENV}-v1-"
-          # List caches (first 100 is plenty in practice), sort newest-first, drop first 3, delete the rest
-          gh api -H "Accept: application/vnd.githubjson" "/repos/${REPO}/actions/caches?per_page=100" \
+
+          # Quick capability probe (avoid failing if caller token lacks permissions)
+          if ! gh api -H "Accept: application/vnd.github+json" "/repos/${REPO}" >/dev/null 2>&1; then
+            echo "::notice::No token permission for gh; skipping prune."
+            exit 0
+          fi
+
+          gh api -H "Accept: application/vnd.github+json" "/repos/${REPO}/actions/caches?per_page=100" \
             --jq ".actions_caches
                  | map(select(.key | startswith(\"${PREFIX}\")))
                  | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" \
           | while read -r ID; do
               echo "Deleting cache id=$ID"
-              gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}"
+              gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}" || true
             done

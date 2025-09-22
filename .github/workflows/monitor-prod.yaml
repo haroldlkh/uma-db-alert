@@ -13,14 +13,25 @@ on:
         description: "Check to run without sending alerts"
         type: boolean
         required: false
-        default: "false"
+        default: false
 
 jobs:
-  prod:
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true')) }}
+  # Manual trigger: may pass inputs.dry_run
+  prod_dispatch:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
+      environment_name: "Prod"
+      outputs_profiles: "discord_forum"
+    secrets:
+      CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.PROD_DISCORD_WEBHOOK }}
+
+  # Scheduled trigger: do NOT reference inputs.* (reusable defaults dry_run=false)
+  prod_schedule:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.RUN_MONITOR == 'true' }}
+    uses: ./.github/workflows/run-monitor.yaml
+    with:
       environment_name: "Prod"
       outputs_profiles: "discord_forum"
     secrets:
