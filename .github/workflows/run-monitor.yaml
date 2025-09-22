@@ -13,7 +13,7 @@ on:
       # For "discord_forum", expose this (env-scoped in your repo; repo-scoped for external users):
       CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
       # For future text channel, you’ll add:
-      # CALLER_DISCORD_WEBHOOK_FORUM:  { required: false }
+      # CALLER_DISCORD_WEBHOOK_TEXT:  { required: false }
 
 jobs:
   run:

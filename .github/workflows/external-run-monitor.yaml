@@ -1,52 +1,61 @@
-name: Run UMA Monitor (reusable)
+name: Run external UMA Monitor (reusable)
 
 on:
   workflow_call:
     inputs:
       dry_run:            { type: boolean, default: false }
-      sites_path:         { type: string,  required: false }
-      environment_name:   { type: string,  required: true }
+      sites_path:         { type: string,  required: false }       # path inside CALLER repo
+      environment_name:   { type: string,  required: true }        # e.g. "repo"
       reset_state:        { type: boolean, default: false }
       outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
+      tool_ref:           { type: string,  required: false, default: "main" }  # tag/branch of YOUR repo
+      prune_caches:       { type: boolean, default: true }         # keep newest 3
     secrets:
-      # Provide only the secrets you actually need for the selected outputs.
-      # For "discord_forum", expose this (env-scoped in your repo; repo-scoped for external users):
       CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
-      # For future text channel, you’ll add:
-      # DISCORD_WEBHOOK_TEXT:  { required: false }
 
 jobs:
-  run:    
-    permissions:
-    # prod/staging guard stays (you already have it at the caller too)
+  run:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     runs-on: ubuntu-latest
 
-    # Export any provided secrets as env vars (empty if secret not set).
-    # Preflight will check only the ones required by your selected outputs.
     env:
+      # Only expose what selected outputs require; preflight enforces presence
       DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
-      # DISCORD_WEBHOOK_TEXT:  ${{ secrets.DISCORD_WEBHOOK_TEXT }}
 
     steps:
+      # 1) Caller repo (their sites.yaml usually lives here)
       - uses: actions/checkout@v4
 
+      # 2) Your tool repo (code + catalogue), pinned by input
+      - name: Checkout UMA tool repo
+        uses: actions/checkout@v4
+        with:
+          repository: haroldlkh/uma-db-alert
+          ref: ${{ inputs.tool_ref }}
+          path: _tool
+
+      # 3) Install deps from YOUR repo
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r requirements.txt
+          pip install -r _tool/requirements.txt
 
-      - name: Prepare sites config (path > default)
+      # 4) Prepare sites config (prefer caller path; else caller default; else tool sample)
+      - name: Prepare sites config (path > caller default > tool sample)
         id: cfg
+        shell: bash
         run: |
+          set -euo pipefail
           if [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
             cp "${{ inputs.sites_path }}" sites.effective.yaml
+          elif [ -f "config/sites.yaml" ]; then
+            cp "config/sites.yaml" sites.effective.yaml
           else
-            cp config/sites.yaml sites.effective.yaml
+            cp "_tool/config/sites.yaml" sites.effective.yaml
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      # ---------- STATE CACHE (your current steps, unchanged) ----------
+      # ---------- STATE CACHE ----------
       - name: Resolve state dir (per repo + environment)
         id: st
         shell: bash
@@ -73,26 +82,28 @@ jobs:
         run: |
           echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
           echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
-      # ---------------------------------------------------------------
+      # ----------------------------------
 
+      # 5) Playwright cache/install
       - name: Cache Playwright browsers (optional)
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-msplaywright-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-msplaywright-${{ hashFiles('_tool/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-msplaywright-
 
       - name: Install Playwright browsers (Chromium)
         run: python -m playwright install chromium
 
+      # 6) Build outputs.effective.yaml from YOUR catalogue
       - name: Resolve outputs profiles → outputs.effective.yaml
         run: |
           python - <<'PY'
           import sys, yaml, os
           csv = os.environ.get("INPUTS", "discord_forum")
           names = [n.strip() for n in csv.split(",") if n.strip()]
-          with open("config/output_catalogue.yaml", "r", encoding="utf-8") as f:
+          with open("_tool/config/output_catalogue.yaml", "r", encoding="utf-8") as f:
               catalogue = yaml.safe_load(f) or {}
           table = catalogue.get("outputs", {}) or {}
           chosen, missing = [], []
@@ -111,6 +122,7 @@ jobs:
         env:
           INPUTS: ${{ inputs.outputs_profiles }}
 
+      # 7) Preflight envs required by selected outputs
       - name: Preflight required webhooks
         shell: bash
         run: |
@@ -134,35 +146,46 @@ jobs:
           done
           [ "$missing" -eq 0 ]
 
+      # 8) Run orchestrator from YOUR repo
       - name: Run orchestrator
+        env:
+          PYTHONPATH: ${{ github.workspace }}/_tool
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
-          python orchestrator.py \
+          python _tool/orchestrator.py \
             --sites "${{ steps.cfg.outputs.sites }}" \
             --outputs outputs.effective.yaml \
             $DRY
 
+      # 9) Save updated state cache
       - name: Save state cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.st.outputs.dir }}
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
+          retention-days: 7
 
+      # 10) (Optional) prune: keep newest 3; skips silently if no permission
       - name: Prune old UMA state caches (keep last 3)
-        if: always()
+        if: ${{ inputs.prune_caches }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ENV:  ${{ inputs.environment_name }}
+        shell: bash
         run: |
           set -euo pipefail
           PREFIX="uma-state-${REPO}-${ENV}-v1-"
-          gh api -H "Accept: application/vnd.githubjson" "/repos/${REPO}/actions/caches?per_page=100" \
-            --jq ".actions_caches
-                 | map(select(.key | startswith(\"${PREFIX}\")))
-                 | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" \
-          | while read -r ID; do
-              gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}"
-            done
+          IDS=$(gh api -H "Accept: application/vnd.github+json" "/repos/${REPO}/actions/caches?per_page=100" \
+                --jq ".actions_caches
+                     | map(select(.key | startswith(\"${PREFIX}\")))
+                     | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" 2>/dev/null || true)
+          if [ -z "$IDS" ]; then
+            echo "::notice::Skipping prune (no permission or no caches)."; exit 0
+          fi
+          for ID in $IDS; do
+            gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}" >/dev/null 2>&1 || \
+              echo "::notice::Could not delete cache id=$ID (insufficient permission)."
+          done
