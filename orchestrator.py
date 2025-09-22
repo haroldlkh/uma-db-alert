@@ -45,18 +45,19 @@ def filter_new_or_changed(site_id: str, url: str, opts: dict, records: list[dict
     return out
 
 def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
-    sites_cfg = load_yaml(sites_cfg_path)
+    sites_cfg   = load_yaml(sites_cfg_path)
     outputs_cfg = load_yaml(outputs_cfg_path)
 
-    # For now: call each configured source_site, but only take the FIRST record overall.
     for site in sites_cfg.get("sites", []):
-        site_mod = importlib.import_module(f"source_sites.{site['source_site']}")
+        # INDENT everything in this block
+        site_mod      = importlib.import_module(f"source_sites.{site['source_site']}")
         site_opts_cfg = site.get("options") or {}
-        eff_opts = site_mod.merge_site_options(site_opts_cfg)  # <- once per site
+        eff_opts      = site_mod.merge_site_options(site_opts_cfg)  # once per site
 
         for search in site.get("searches", []):
             url = search["url"]
-            records = site_mod.scrape(url, eff_opts)    # <- pass URL + site opts
+            # You kept the name `scrape`, so call it with (url, eff_opts)
+            records = site_mod.scrape(url, eff_opts)
             if not records:
                 print("No records for search:", url)
                 continue
@@ -68,9 +69,8 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
                 title, body = make_title_and_body(r)
                 send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
                 time.sleep(1.0)
-                print("Posted trainer:", r["trainer_id"], "(dry_run=" + str(dry_run) + ")")
-
-    print("No placeholder records produced.")
+                print("Posted trainer:", r["trainer_id"], f"(dry_run={dry_run})")
+    return 0
 
 def main():
     ap = argparse.ArgumentParser()
