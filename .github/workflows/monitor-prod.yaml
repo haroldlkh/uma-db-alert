@@ -1,5 +1,9 @@
 name: UMA Monitor (Prod)
 
+permissions:
+  actions: write   # allow deleting old caches
+  contents: read
+
 on:
   schedule:
     - cron: "0 * * * *"

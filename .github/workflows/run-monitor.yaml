@@ -16,10 +16,7 @@ on:
       # CALLER_DISCORD_WEBHOOK_FORUM:  { required: false }
 
 jobs:
-  run:    
-    permissions:
-      actions: write   # allow deleting old caches
-      contents: read
+  run:
     # prod/staging guard stays (you already have it at the caller too)
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     environment: ${{ inputs.environment_name }}

@@ -1,5 +1,9 @@
 # name: Example caller for other users
 
+# permissions:
+#   actions: write   # allow deleting old caches
+#   contents: read
+
 # on:
 #   workflow_dispatch:
 #     inputs:

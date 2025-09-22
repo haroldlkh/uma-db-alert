@@ -1,5 +1,9 @@
 name: UMA Monitor (Staging)
-
+    
+permissions:
+  actions: write   # allow deleting old caches
+  contents: read
+  
 on:
   workflow_dispatch:
     inputs:
