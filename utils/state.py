@@ -1,6 +1,7 @@
 # utils/state.py
 from __future__ import annotations
 import hashlib, json, os, time, unicodedata, re
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from typing import Dict, List
 
 # ---------- paths ----------
@@ -13,13 +14,44 @@ def _env_name() -> str:
     return os.getenv("UMA_ENV_NAME", "repo")
 
 def state_dir() -> str:
-    base = os.getenv("UMA_STATE_DIR", os.path.expanduser("~/.uma_monitor"))
-    p = os.path.join(base, _repo_namespace(), _env_name(), "state")
+    """
+    Resolve a *stable* state directory.
+    If UMA_STATE_DIR is provided (CI passes a per-repo/per-env root),
+    we DO NOT append repo/env again — only add 'state'.
+    Otherwise, default to ~/.uma_monitor/<repo>/<env>/state.
+    """
+    base = os.getenv("UMA_STATE_DIR")
+    if base:
+        p = os.path.join(base, "state")
+    else:
+        base = os.path.expanduser("~/.uma_monitor")
+        p = os.path.join(base, _repo_namespace(), _env_name(), "state")
     os.makedirs(p, exist_ok=True)
     return p
 
 def _canon_url(u: str) -> str:
-    return unicodedata.normalize("NFKC", (u or "").strip())
+    """Normalize URLs so tiny differences don't create new state files."""
+    u = unicodedata.normalize("NFKC", (u or "").strip())
+    if not u:
+        return ""
+    try:
+        scheme, netloc, path, query, frag = urlsplit(u)
+        scheme = (scheme or "").lower()
+        netloc = (netloc or "").lower()
+        # drop trailing slash in path (but keep root '/')
+        if path.endswith("/") and len(path) > 1:
+            path = path[:-1]
+        # sort query params for stability
+        if query:
+            q = parse_qsl(query, keep_blank_values=True)
+            q.sort()
+            query = urlencode(q)
+        # ignore fragment in identity
+        frag = ""
+        return urlunsplit((scheme, netloc, path, query, frag))
+    except Exception:
+        # fall back to trimmed
+        return u.rstrip("/")
 
 def _search_key(site_id: str, url: str) -> str:
     raw = f"{site_id}||{_canon_url(url)}"
