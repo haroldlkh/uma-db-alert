@@ -12,7 +12,7 @@
 #         type: boolean
 #         default: false
 #   schedule:
-#     - cron: "0 * * * *"   # optional
+#     - cron: "0 * * * *"   # convert desired frequency to cron. Github max is every 5 minutes. At your own cost.
 
 # jobs:
 #   monitor:
