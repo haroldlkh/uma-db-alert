@@ -12,7 +12,6 @@ sites:
       search_timeout_ms: 30000
       settle_ms: 250
       # seen-records
-      detect_updates: true         # set true once to seed, then flip back
       per_run_max: 10000
 
     searches:
