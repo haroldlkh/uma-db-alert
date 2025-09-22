@@ -1,4 +1,4 @@
-name: UMA External Monitor
+name: Example caller for other users
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
     with:
       dry_run: ${{ inputs.dry_run }}
     secrets:
-      CALLER_DISCORD_WEBHOOK: ${{ secrets.REPO_DISCORD_WEBHOOK }}
+      CALLER_DISCORD_WEBHOOK: ${{ secrets.MY_DISCORD_WEBHOOK }}
 
 # example when finalising
 # jobs:
