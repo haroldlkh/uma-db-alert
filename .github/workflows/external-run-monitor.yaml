@@ -19,7 +19,10 @@ jobs:
   run:
     # prod/staging guard stays (you already have it at the caller too)
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest    
+    permissions:
+      actions: write
+      contents: read
 
     # Export any provided secrets as env vars (empty if secret not set).
     # Preflight will check only the ones required by your selected outputs.
@@ -148,3 +151,20 @@ jobs:
         with:
           path: ${{ steps.st.outputs.dir }}
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
+
+      - name: Prune old UMA state caches (keep last 3)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ENV:  ${{ inputs.environment_name }}
+        run: |
+          set -euo pipefail
+          PREFIX="uma-state-${REPO}-${ENV}-v1-"
+          gh api -H "Accept: application/vnd.githubjson" "/repos/${REPO}/actions/caches?per_page=100" \
+            --jq ".actions_caches
+                 | map(select(.key | startswith(\"${PREFIX}\")))
+                 | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" \
+          | while read -r ID; do
+              gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}"
+            done
