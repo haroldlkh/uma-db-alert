@@ -1,0 +1,134 @@
+name: Simulate UMA Delta (edit state only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: "Env to target (Staging or Prod)"
+        type: choice
+        options: [Staging, Prod]
+        default: Staging
+      simulate_search:
+        description: "Search name to target (leave blank = first search)"
+        type: string
+        required: false
+      simulate_count:
+        description: "How many IDs to re-emit"
+        type: number
+        default: 1
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Resolve the same state dir your main workflow uses
+      - name: Resolve state dir (per repo + environment)
+        id: st
+        shell: bash
+        run: |
+          REPO_NS="${GITHUB_REPOSITORY//\//_}"
+          ENV_NAME="${{ inputs.environment_name }}"
+          DIR="$HOME/.uma_monitor/$REPO_NS/$ENV_NAME"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          mkdir -p "$DIR"
+
+      # Restore the latest state cache by prefix
+      - name: Restore state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
+          restore-keys: |
+            uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+
+      # Match your env variables so utils/state.py resolves paths identically
+      - name: Set state namespace env
+        run: |
+          echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
+          echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
+
+      - name: Install YAML dependency
+        run: pip install pyyaml
+
+      # Remove N seen IDs from the chosen search's state file
+      - name: Edit state to force N deltas
+        run: |
+          python - <<'PY'
+          import os, json, yaml, glob
+          from utils import state as st
+
+          env = os.environ["UMA_ENV_NAME"]
+          root = os.environ["UMA_STATE_DIR"]  # base; actual state dir is root/state
+
+          # Load sites config (same as run)
+          cfg = yaml.safe_load(open("config/sites.yaml","r",encoding="utf-8")) or {}
+          sites = cfg.get("sites") or []
+          if not sites:
+            raise SystemExit("No sites configured.")
+          site = sites[0]  # single site module today
+          src  = site["source_site"]
+          searches = site.get("searches") or []
+          if not searches:
+            raise SystemExit("No searches configured.")
+
+          want_name = os.environ.get("SIM_SEARCH","").strip()
+          # Pick by exact name if provided, else first search
+          target_idx = 0
+          if want_name:
+            for i,s in enumerate(searches):
+              if (s.get("name") or "") == want_name:
+                target_idx = i; break
+
+          s = searches[target_idx]
+          url = s["url"]
+          sid = s.get("id") or s.get("name") or f"search{target_idx+1}"
+          per_search_site_id = f"{src}::{sid}"
+
+          # Try to find a matching state file by reading JSON headers
+          state_dir = os.path.join(root, "state")
+          files = sorted(glob.glob(os.path.join(state_dir, "*.json")))
+          picked = None
+          for f in files:
+            try:
+              d = json.load(open(f,"r",encoding="utf-8"))
+            except Exception:
+              continue
+            if d.get("site_id") == per_search_site_id:
+              # Compare canonical URL (search_url stored by utils/state.py)
+              if d.get("search_url") == st._canon_url(url):
+                picked = f
+                break
+
+          if not picked:
+            print(f"::notice::No seeded state found yet for search '{sid}'. Run your monitor once to seed, then re-run this simulation.")
+            raise SystemExit(0)
+
+          n = max(0, int(os.environ.get("SIM_COUNT","1")))
+          data = json.load(open(picked,"r",encoding="utf-8"))
+          digs = data.get("digests") or {}
+          ids  = sorted(digs.keys())
+          if not ids:
+            print(f"::notice::State has no digests yet for '{sid}' (probably not seeded).")
+            raise SystemExit(0)
+
+          victims = ids[:n]  # deterministically choose first n
+          for vid in victims:
+            digs.pop(vid, None)
+          data["digests"] = digs
+          with open(picked,"w",encoding="utf-8") as g:
+            json.dump(data, g, ensure_ascii=False, indent=2)
+          print(f"[simulate] env={env} search={sid} file={os.path.basename(picked)} removed_ids={victims}")
+          PY
+        env:
+          SIM_SEARCH: ${{ inputs.simulate_search }}
+          SIM_COUNT:  ${{ inputs.simulate_count }}
+
+      # Save an updated cache (immutable key — new entry each sim run)
+      - name: Save state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
