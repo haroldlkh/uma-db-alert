@@ -1,72 +1,150 @@
-name: UMA Monitor (reusable for external)
+name: Run UMA Monitor (reusable)
 
 on:
   workflow_call:
     inputs:
-      dry_run:        { type: boolean, default: false }
-      sites_path:     { type: string,  required: true }   # path in caller repo
-      tool_ref:       { type: string,  default: "main" }  # tag/branch of your repo to use
-      outputs_profiles:  { type: string,  required: false, default: "discord_forum" }
+      dry_run:            { type: boolean, default: false }
+      sites_path:         { type: string,  required: false }
+      environment_name:   { type: string,  required: true }
+      reset_state:        { type: boolean, default: false }
+      outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
     secrets:
-      CALLER_DISCORD_WEBHOOK: { required: false }
+      # Provide only the secrets you actually need for the selected outputs.
+      # For "discord_forum", expose this (env-scoped in your repo; repo-scoped for external users):
+      CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
+      # For future text channel, you’ll add:
+      # DISCORD_WEBHOOK_TEXT:  { required: false }
 
 jobs:
   run:
+    # prod/staging guard stays (you already have it at the caller too)
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     runs-on: ubuntu-latest
 
+    # Export any provided secrets as env vars (empty if secret not set).
+    # Preflight will check only the ones required by your selected outputs.
+    env:
+      DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
+      # DISCORD_WEBHOOK_TEXT:  ${{ secrets.DISCORD_WEBHOOK_TEXT }}
+
     steps:
-      - name: Checkout caller repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Checkout tool (this repo)
-        uses: actions/checkout@v4
-        with:
-          repository: haroldlkh/uma-db-alert
-          ref: ${{ inputs.tool_ref }}
-          path: tool
-
-      - name: Install deps + browsers
+      - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r tool/requirements.txt
-          python -m playwright install chromium
+          pip install -r requirements.txt
 
-      - name: Cache Playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-msplaywright-${{ hashFiles('tool/requirements.txt') }}
-          restore-keys: ${{ runner.os }}-msplaywright-
-
-      - name: Resolve sites config
+      - name: Prepare sites config (path > default)
+        id: cfg
         run: |
-          test -f "${{ inputs.sites_path }}" || { echo "sites.yaml not found at ${{ inputs.sites_path }}"; exit 1; }
-          cp "${{ inputs.sites_path }}" sites.effective.yaml
+          if [ -n "${{ inputs.sites_path }}" ] && [ -f "${{ inputs.sites_path }}" ]; then
+            cp "${{ inputs.sites_path }}" sites.effective.yaml
+          else
+            cp config/sites.yaml sites.effective.yaml
+          fi
+          echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
+
+      # ---------- STATE CACHE (your current steps, unchanged) ----------
+      - name: Resolve state dir (per repo + environment)
+        id: st
+        shell: bash
+        run: |
+          REPO_NS="${GITHUB_REPOSITORY//\//_}"
+          ENV_NAME="${{ inputs.environment_name }}"
+          DIR="$HOME/.uma_monitor/$REPO_NS/$ENV_NAME"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          mkdir -p "$DIR"
 
       - name: Restore state cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.uma_monitor/${{ github.repository }}
-          key: uma-state-v1-${{ github.repository }}
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
           restore-keys: |
-            uma-state-v1-
+            uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+
+      - name: Reset state dir (toggle)
+        if: ${{ inputs.reset_state }}
+        run: rm -rf ~/.uma_monitor
+
+      - name: Set state namespace env
+        run: |
+          echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
+          echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
+      # ---------------------------------------------------------------
+
+      - name: Cache Playwright browsers (optional)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-msplaywright-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-msplaywright-
+
+      - name: Install Playwright browsers (Chromium)
+        run: python -m playwright install chromium
+
+      - name: Resolve outputs profiles → outputs.effective.yaml
+        run: |
+          python - <<'PY'
+          import sys, yaml, os
+          csv = os.environ.get("INPUTS", "discord_forum")
+          names = [n.strip() for n in csv.split(",") if n.strip()]
+          with open("config/output_catalogue.yaml", "r", encoding="utf-8") as f:
+              catalogue = yaml.safe_load(f) or {}
+          table = catalogue.get("outputs", {}) or {}
+          chosen, missing = [], []
+          for n in names:
+              spec = table.get(n)
+              (chosen if spec else missing).append(n if not spec else spec)
+          if missing:
+              sys.stderr.write("Unknown outputs profile(s): " + ", ".join(missing) + "\n")
+              sys.exit(1)
+          if not chosen:
+              sys.stderr.write("No outputs selected.\n"); sys.exit(1)
+          with open("outputs.effective.yaml", "w", encoding="utf-8") as g:
+              yaml.safe_dump({"outputs": chosen}, g, allow_unicode=True, sort_keys=False)
+          print(f"Using outputs: {', '.join(names)}")
+          PY
+        env:
+          INPUTS: ${{ inputs.outputs_profiles }}
+
+      - name: Preflight required webhooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          reqs="$(python - <<'PY'
+          import yaml
+          d = yaml.safe_load(open("outputs.effective.yaml","r",encoding="utf-8")) or {}
+          names = []
+          for o in d.get("outputs", []):
+              env = (o.get("settings") or {}).get("webhook_env")
+              if env: names.append(env)
+          print(" ".join(sorted(set(names))))
+          PY
+          )"
+          missing=0
+          for name in $reqs; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required env $name is not set (selected by outputs_profiles)"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
 
       - name: Run orchestrator
-        env:
-          DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK }}
-          # isolate cache per caller repo:
-          UMA_STATE_DIR: ~/.uma_monitor/${{ github.repository }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
-          python tool/orchestrator.py \
-            --sites sites.effective.yaml \
-            --outputs tool/config/outputs.yaml \
+          python orchestrator.py \
+            --sites "${{ steps.cfg.outputs.sites }}" \
+            --outputs outputs.effective.yaml \
             $DRY
 
       - name: Save state cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ~/.uma_monitor/${{ github.repository }}
-          key: uma-state-v1-${{ github.run_id }}
+          path: ${{ steps.st.outputs.dir }}
+          key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}

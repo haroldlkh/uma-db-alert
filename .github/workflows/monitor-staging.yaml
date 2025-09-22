@@ -17,6 +17,7 @@ jobs:
     uses: ./.github/workflows/run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
+      reset_state: ${{ inputs.reset_state }}
       environment_name: "Staging"
       outputs_profiles: "discord_forum"   # or "discord_forum,discord_text" later
     secrets:

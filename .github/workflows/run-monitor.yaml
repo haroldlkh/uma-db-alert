@@ -3,19 +3,31 @@ name: Run UMA Monitor (reusable)
 on:
   workflow_call:
     inputs:
-      dry_run:        { type: boolean, default: false }
-      sites_path:     { type: string,  required: false }
-      environment_name: { type: string, required: true }
-      reset_state:     { type: boolean, default: false }
-      outputs_profiles:  { type: string,  required: false, default: "discord_forum" }
+      dry_run:            { type: boolean, default: false }
+      sites_path:         { type: string,  required: false }
+      environment_name:   { type: string,  required: true }
+      reset_state:        { type: boolean, default: false }
+      outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
     secrets:
+      # Provide only the secrets you actually need for the selected outputs.
+      # For "discord_forum", expose this (env-scoped in your repo; repo-scoped for external users):
       CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
+      # For future text channel, you’ll add:
+      # DISCORD_WEBHOOK_TEXT:  { required: false }
 
 jobs:
   run:
+    # prod/staging guard stays (you already have it at the caller too)
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
-    environment: ${{ inputs.environment_name }}    
+    environment: ${{ inputs.environment_name }}
     runs-on: ubuntu-latest
+
+    # Export any provided secrets as env vars (empty if secret not set).
+    # Preflight will check only the ones required by your selected outputs.
+    env:
+      DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
+      # DISCORD_WEBHOOK_TEXT:  ${{ secrets.DISCORD_WEBHOOK_TEXT }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +46,7 @@ jobs:
           fi
           echo "sites=sites.effective.yaml" >> "$GITHUB_OUTPUT"
 
-      # ---------- STATE CACHE (add these 3 steps) ----------
+      # ---------- STATE CACHE (your current steps, unchanged) ----------
       - name: Resolve state dir (per repo + environment)
         id: st
         shell: bash
@@ -52,7 +64,7 @@ jobs:
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
           restore-keys: |
             uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
-      
+
       - name: Reset state dir (toggle)
         if: ${{ inputs.reset_state }}
         run: rm -rf ~/.uma_monitor
@@ -60,9 +72,8 @@ jobs:
       - name: Set state namespace env
         run: |
           echo "UMA_ENV_NAME=${{ inputs.environment_name }}" >> $GITHUB_ENV
-          # optional: pin base dir (utils will append /state)
           echo "UMA_STATE_DIR=${{ steps.st.outputs.dir }}" >> $GITHUB_ENV
-      # ------------------------------------------------------
+      # ---------------------------------------------------------------
 
       - name: Cache Playwright browsers (optional)
         uses: actions/cache@v4
@@ -84,12 +95,10 @@ jobs:
           with open("config/output_catalogue.yaml", "r", encoding="utf-8") as f:
               catalogue = yaml.safe_load(f) or {}
           table = catalogue.get("outputs", {}) or {}
-          chosen = []
-          missing = []
+          chosen, missing = [], []
           for n in names:
               spec = table.get(n)
-              if spec: chosen.append(spec)
-              else: missing.append(n)
+              (chosen if spec else missing).append(n if not spec else spec)
           if missing:
               sys.stderr.write("Unknown outputs profile(s): " + ", ".join(missing) + "\n")
               sys.exit(1)
@@ -118,17 +127,14 @@ jobs:
           )"
           missing=0
           for name in $reqs; do
-            # indirect expansion: ${!name} reads the env var whose name is in $name
             if [ -z "${!name:-}" ]; then
               echo "::error::Required env $name is not set (selected by outputs_profiles)"
               missing=1
             fi
           done
           [ "$missing" -eq 0 ]
-      
+
       - name: Run orchestrator
-        # env:
-        #   DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
