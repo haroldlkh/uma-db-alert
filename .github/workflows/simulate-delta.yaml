@@ -1,4 +1,4 @@
-name: Simulate UMA Delta (edit state only)
+name: Simulate new record (edit state only)
 
 on:
   workflow_dispatch:
