@@ -167,23 +167,20 @@ jobs:
 
       # 10) (Optional) prune: keep newest 3; skips silently if no permission
       - name: Prune old UMA state caches (keep last 3)
-        if: ${{ inputs.prune_caches }}
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ENV:  ${{ inputs.environment_name }}
-        shell: bash
         run: |
           set -euo pipefail
           PREFIX="uma-state-${REPO}-${ENV}-v1-"
-          IDS=$(gh api -H "Accept: application/vnd.github+json" "/repos/${REPO}/actions/caches?per_page=100" \
-                --jq ".actions_caches
-                     | map(select(.key | startswith(\"${PREFIX}\")))
-                     | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" 2>/dev/null || true)
-          if [ -z "$IDS" ]; then
-            echo "::notice::Skipping prune (no permission or no caches)."; exit 0
-          fi
-          for ID in $IDS; do
-            gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}" >/dev/null 2>&1 || \
-              echo "::notice::Could not delete cache id=$ID (insufficient permission)."
-          done
+          # List caches (first 100 is plenty in practice), sort newest-first, drop first 3, delete the rest
+          gh api -H "Accept: application/vnd.githubjson" "/repos/${REPO}/actions/caches?per_page=100" \
+            --jq ".actions_caches
+                 | map(select(.key | startswith(\"${PREFIX}\")))
+                 | sort_by(.last_accessed_at) | reverse | .[3:] | .[].id" \
+          | while read -r ID; do
+              echo "Deleting cache id=$ID"
+              gh api -X DELETE "/repos/${REPO}/actions/caches/${ID}"
+            done
