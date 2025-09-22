@@ -13,9 +13,11 @@ on:
 
 jobs:
   prod:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true')) }}
     uses: ./.github/workflows/run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Prod"
+      outputs_profiles: "discord_forum"
     secrets:
-      CALLER_DISCORD_WEBHOOK: ${{ secrets.PROD_DISCORD_WEBHOOK }}
+      CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.PROD_DISCORD_WEBHOOK }}

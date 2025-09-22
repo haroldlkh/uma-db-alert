@@ -17,6 +17,7 @@ jobs:
     uses: ./.github/workflows/run-monitor.yaml
     with:
       dry_run: ${{ inputs.dry_run }}
-      environment_name: "Staging"   # passes the env name to the called job
+      environment_name: "Staging"
+      outputs_profiles: "discord_forum"   # or "discord_forum,discord_text" later
     secrets:
-      CALLER_DISCORD_WEBHOOK: ${{ secrets.ENV_DISCORD_WEBHOOK }}
+      CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.ENV_DISCORD_WEBHOOK }}

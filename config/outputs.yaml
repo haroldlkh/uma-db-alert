@@ -1,7 +1,0 @@
-outputs:
-  - type: discord
-    settings:
-      webhook_env: DISCORD_WEBHOOK_MAIN
-      channel_kind: forum        # required to create a NEW Forum post
-      max_chars: 1800            # keep under Discord’s 2000 limit
-      # applied_tags: [123456789012345678]   # optional forum tag IDs

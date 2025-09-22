@@ -6,9 +6,9 @@ on:
       dry_run:        { type: boolean, default: false }
       sites_path:     { type: string,  required: true }   # path in caller repo
       tool_ref:       { type: string,  default: "main" }  # tag/branch of your repo to use
+      outputs_profiles:  { type: string,  required: false, default: "discord_forum" }
     secrets:
-      CALLER_DISCORD_WEBHOOK:
-        required: true
+      CALLER_DISCORD_WEBHOOK: { required: false }
 
 jobs:
   run:
@@ -53,7 +53,7 @@ jobs:
 
       - name: Run orchestrator
         env:
-          DISCORD_WEBHOOK_MAIN: ${{ secrets.CALLER_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK }}
           # isolate cache per caller repo:
           UMA_STATE_DIR: ~/.uma_monitor/${{ github.repository }}
         run: |

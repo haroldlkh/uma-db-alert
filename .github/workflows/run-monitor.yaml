@@ -7,9 +7,9 @@ on:
       sites_path:     { type: string,  required: false }
       environment_name: { type: string, required: true }
       reset_state:     { type: boolean, default: false }
+      outputs_profiles:  { type: string,  required: false, default: "discord_forum" }
     secrets:
-      CALLER_DISCORD_WEBHOOK:
-        required: true
+      CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
 
 jobs:
   run:
@@ -75,15 +75,66 @@ jobs:
       - name: Install Playwright browsers (Chromium)
         run: python -m playwright install chromium
 
-      - name: Run orchestrator
+      - name: Resolve outputs profiles → outputs.effective.yaml
+        run: |
+          python - <<'PY'
+          import sys, yaml, os
+          csv = os.environ.get("INPUTS", "discord_forum")
+          names = [n.strip() for n in csv.split(",") if n.strip()]
+          with open("config/output_catalogue.yaml", "r", encoding="utf-8") as f:
+              catalogue = yaml.safe_load(f) or {}
+          table = catalogue.get("outputs", {}) or {}
+          chosen = []
+          missing = []
+          for n in names:
+              spec = table.get(n)
+              if spec: chosen.append(spec)
+              else: missing.append(n)
+          if missing:
+              sys.stderr.write("Unknown outputs profile(s): " + ", ".join(missing) + "\n")
+              sys.exit(1)
+          if not chosen:
+              sys.stderr.write("No outputs selected.\n"); sys.exit(1)
+          with open("outputs.effective.yaml", "w", encoding="utf-8") as g:
+              yaml.safe_dump({"outputs": chosen}, g, allow_unicode=True, sort_keys=False)
+          print(f"Using outputs: {', '.join(names)}")
+          PY
         env:
-          DISCORD_WEBHOOK_MAIN: ${{ secrets.CALLER_DISCORD_WEBHOOK }}
+          INPUTS: ${{ inputs.outputs_profiles }}
+
+      - name: Preflight required webhooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          reqs="$(python - <<'PY'
+          import yaml
+          d = yaml.safe_load(open("outputs.effective.yaml","r",encoding="utf-8")) or {}
+          names = []
+          for o in d.get("outputs", []):
+              env = (o.get("settings") or {}).get("webhook_env")
+              if env: names.append(env)
+          print(" ".join(sorted(set(names))))
+          PY
+          )"
+          missing=0
+          for name in $reqs; do
+            # indirect expansion: ${!name} reads the env var whose name is in $name
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required env $name is not set (selected by outputs_profiles)"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+      
+      - name: Run orchestrator
+        # env:
+        #   DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
         run: |
           DRY=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then DRY="--dry-run"; fi
           python orchestrator.py \
             --sites "${{ steps.cfg.outputs.sites }}" \
-            --outputs config/outputs.yaml \
+            --outputs outputs.effective.yaml \
             $DRY
 
       - name: Save state cache

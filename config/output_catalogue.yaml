@@ -1,0 +1,15 @@
+# All available outputs live here. 
+outputs:
+  discord_forum:
+    type: discord                 # uses outputs/discord.py (forum mode)
+    settings:
+      webhook_env: DISCORD_WEBHOOK_FORUM
+      channel_kind: forum
+      max_chars: 1800
+
+  # discord_text:
+  #   type: discord_text
+  #   settings:
+  #     webhook_env: DISCORD_WEBHOOK_TEXT
+  #     max_chars: 1800
+  #     include_title: true
