@@ -13,35 +13,35 @@ def send_to_all_outputs(title: str, body: str, outputs_cfg: dict, dry_run: bool)
 
 def filter_new_or_changed(site_id: str, url: str, opts: dict, records: list[dict]) -> list[dict]:
     state = st.load(site_id, url)
+
     detect_updates = bool(opts.get("detect_updates", True))
-    bootstrap      = bool(opts.get("bootstrap", False))
     per_run_max    = int(opts.get("per_run_max", 50))
+
+    # If the state file is empty/unseeded, seed and return nothing.
+    if not state.get("seeded"):
+        st.seed_from_records(state, records)
+        st.trim_window(state)
+        st.save(site_id, url, state)
+        print(f"[state] auto-seeded {len(records)} rows for {site_id}")
+        return []
 
     if not detect_updates:
         return records[:per_run_max]
 
-    if not state.get("seeded") and bootstrap:
-        for r in records:
-            fid = str(r["trainer_id"])
-            fp  = st.whites_fingerprint(r.get("white_list", []))
-            state["digests"][fid] = fp
-        state["seeded"] = True
-        st.trim_window(state); st.save(site_id, url, state)
-        print(f"[state] seeded {len(records)} rows for {site_id}")
-        return []
-
+    # change detection
     out, digests = [], state.get("digests", {})
     for r in records:
         fid = str(r["trainer_id"])
         fp  = st.whites_fingerprint(r.get("white_list", []))
-        if digests.get(fid) != fp:
+        if digests.get(fid) != fp:  # new or changed
             out.append(r)
             digests[fid] = fp
             if len(out) >= per_run_max:
                 break
 
     state["digests"] = digests
-    st.trim_window(state); st.save(site_id, url, state)
+    st.trim_window(state)
+    st.save(site_id, url, state)
     return out
 
 def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:

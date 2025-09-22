@@ -6,6 +6,7 @@ on:
       dry_run:        { type: boolean, default: false }
       sites_path:     { type: string,  required: false }
       environment_name: { type: string, required: true }
+      reset_state:     { type: boolean, default: false }
     secrets:
       CALLER_DISCORD_WEBHOOK:
         required: true
@@ -50,6 +51,10 @@ jobs:
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
           restore-keys: |
             uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+      
+      - name: Reset state dir (toggle)
+        if: ${{ inputs.reset_state }}
+        run: rm -rf ~/.uma_monitor
 
       - name: Set state namespace env
         run: |

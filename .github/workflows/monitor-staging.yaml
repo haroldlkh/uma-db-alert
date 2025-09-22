@@ -8,6 +8,9 @@ on:
         type: boolean
         required: false
         default: "false"
+      reset_state:
+        type: boolean
+        default: false
 
 jobs:
   staging:

@@ -77,3 +77,20 @@ def trim_window(st: Dict) -> None:
     if len(d) <= limit: return
     keep_ids = sorted(d.keys())[-limit:]   # cheap heuristic; IDs grow
     st["digests"] = {k: d[k] for k in keep_ids}
+
+def seed_from_records(state: dict, records: list[dict]) -> None:
+    """
+    Populate state['digests'] from a batch of records and mark seeded=True.
+    Safe to call when already seeded (it will no-op).
+    """
+    if state.get("seeded"):
+        return
+    digs = state.setdefault("digests", {})
+    for r in records or []:
+        fid = str(r.get("trainer_id", "")).strip()
+        if not fid:
+            continue
+        fp = whites_fingerprint(r.get("white_list", []))
+        digs[fid] = fp
+    state["seeded"] = True
+
