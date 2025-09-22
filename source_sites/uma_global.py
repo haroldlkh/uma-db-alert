@@ -9,9 +9,12 @@ DEFAULTS = {
     "max_pages": 1,             # 0 = all pages
     "headless": True,
     "verbose": False,
-    "search_timeout_ms": 90_000,
+    "search_timeout_ms": 30_000,      # wait for results after search has started
+    "trigger_timeout_ms": 1_200,      # short wait for table to flip aria-busy="true"
+    "max_click_retries": 3,           # how many times to retry clicking Search
     "settle_ms": 250,
 }
+
 PRESETS = {
     "staging": { "headless": True,  "mode": "first", "verbose": True },
     "prod":    { "headless": True,  "mode": "first", "verbose": False },
@@ -132,34 +135,57 @@ def collect_page_records(page: Page, mode: str, *, verbose=False) -> List[Dict]:
     return out
 
 # -------------------------- navigation/search --------------------------------
-def open_search(page: Page, url: str, *, timeout_ms: int, verbose: bool) -> bool:
+def open_search(page: Page, url: str, *, trigger_timeout_ms: int,
+                results_timeout_ms: int, max_click_retries: int, verbose: bool) -> str:
+    """
+    Navigate to the search URL and try to trigger the search.
+    Returns one of: "results" (>=1 row), "empty" (0 rows), "failed" (couldn't trigger).
+    """
     page.goto(url, wait_until="domcontentloaded")
-    clicked = False
-    for loc in (
-        lambda: page.get_by_role("button", name="Search"),
-        lambda: page.locator("button:has-text('Search')"),
-        lambda: page.locator(".btn-success:has-text('Search')"),
-        lambda: page.locator("text=Search").locator("xpath=ancestor::button[1]"),
-    ):
-        try:
-            btn = loc()
-            if btn and btn.first.is_visible():
-                btn.first.click(); clicked = True; break
-        except Exception: pass
-    if not clicked:
-        try: page.locator("button").first.click()
-        except Exception: pass
-    _log(verbose, "clicked Search:", clicked)
+
+    # Wait until UI has the search button and the table skeleton.
     try:
-        page.wait_for_function(
-            "()=>document.querySelectorAll(\"a[href*='#/user/']\").length>0",
-            timeout=timeout_ms,
-        )
-        _log(verbose, "results appeared")
-        return True
+        page.wait_for_selector(".btn-group .btn-success", timeout=10_000)
+        page.wait_for_selector("table.b-table", timeout=10_000)
     except PWTimeoutError:
-        _log(verbose, "no results in timeout")
-        return False
+        _log(verbose, "UI not ready (no button/table)");  return "failed"
+
+    btn = page.locator(".btn-group .btn-success").first
+
+    for attempt in range(1, max_click_retries + 1):
+        try:
+            # Make sure the button is interactable, then click once.
+            btn.wait_for(state="visible", timeout=1_000)
+            if not btn.is_enabled():
+                page.wait_for_timeout(150)
+            btn.click()
+
+            # Did the search actually start? (table goes busy=true briefly)
+            try:
+                page.wait_for_selector("table.b-table[aria-busy='true']",
+                                       timeout=trigger_timeout_ms)
+            except PWTimeoutError:
+                _log(verbose, f"Search click attempt {attempt}: no busy=true → retry")
+                page.wait_for_timeout(200 * attempt)
+                continue  # try clicking again
+
+            # Now wait for completion (busy=false), then count rows.
+            page.wait_for_function(
+                "() => { const t=document.querySelector('table.b-table');"
+                "return t && t.getAttribute('aria-busy')==='false'; }",
+                timeout=results_timeout_ms,
+            )
+
+            rows = page.locator("table.b-table tbody tr").count()
+            _log(verbose, f"results appeared; rows={rows}")
+            return "results" if rows > 0 else "empty"
+
+        except Exception as e:
+            _log(verbose, f"Search click attempt {attempt} raised: {e!r}")
+            page.wait_for_timeout(200 * attempt)
+
+    _log(verbose, "exhausted search click retries → failed")
+    return "failed"
 
 def go_next_page(page: Page, *, verbose: bool, timeout_ms: int = 10_000) -> bool:
     """
@@ -231,28 +257,39 @@ def go_next_page(page: Page, *, verbose: bool, timeout_ms: int = 10_000) -> bool
 # --------------------------- public entry point -------------------------------
 def scrape(url: str, opts: Dict[str, Any]) -> List[Dict]:
     out: List[Dict] = []
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=opts["headless"])
         ctx = browser.new_context()
         page = ctx.new_page()
+        try:
+            status = open_search(
+                page,
+                url,
+                trigger_timeout_ms=opts["trigger_timeout_ms"],
+                results_timeout_ms=opts["search_timeout_ms"],   # reuse existing timeout
+                max_click_retries=opts["max_click_retries"],
+                verbose=opts["verbose"],
+            )
+            if status != "results":
+                _log(opts["verbose"], f"search outcome: {status}")
+                return []
 
-        if not open_search(page, url, timeout_ms=opts["search_timeout_ms"], verbose=opts["verbose"]):
-            ctx.close(); browser.close(); return []
-
-        page.wait_for_timeout(opts["settle_ms"])
-        out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
-
-        pages_seen = 1
-        while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
-            if not go_next_page(page, verbose=opts["verbose"]):
-                break
             page.wait_for_timeout(opts["settle_ms"])
-            pages_seen += 1
             out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
 
-        ctx.close(); browser.close()
+            pages_seen = 1
+            while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
+                if not go_next_page(page, verbose=opts["verbose"]):
+                    break
+                page.wait_for_timeout(opts["settle_ms"])
+                pages_seen += 1
+                out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
+        finally:
+            ctx.close()
+            browser.close()
 
+    # annotate source for downstream filtering/logging
     for r in out:
-        r["site_id"] = "uma_global"
         r["source_url"] = url
     return out
