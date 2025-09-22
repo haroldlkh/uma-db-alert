@@ -23,4 +23,4 @@
 #       tool_ref: main                          # or a tag like v0.1
 #       outputs_profiles: "discord_forum" # only option available right now
 #     secrets:
-#       CALLER_DISCORD_WEBHOOK: ${{ secrets.MY_DISCORD_WEBHOOK }}
+#       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
