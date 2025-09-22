@@ -5,7 +5,6 @@ on:
     inputs:
       dry_run:            { type: boolean, default: false }
       sites_path:         { type: string,  required: false }       # path inside CALLER repo
-      environment_name:   { type: string,  required: true }        # e.g. "repo"
       reset_state:        { type: boolean, default: false }
       outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
       tool_ref:           { type: string,  required: false, default: "main" }  # tag/branch of YOUR repo

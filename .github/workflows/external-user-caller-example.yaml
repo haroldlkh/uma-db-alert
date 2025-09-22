@@ -8,9 +8,9 @@
 #   workflow_dispatch:
 #     inputs:
 #       dry_run:
-#         description: "Run without posting"
+#         description: "Check to run without posting"
 #         type: boolean
-#         default: true
+#         default: false
 #   schedule:
 #     - cron: "0 * * * *"   # optional
 
