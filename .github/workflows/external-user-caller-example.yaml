@@ -1,11 +1,11 @@
 # name: Example caller for other users
 
 # permissions:
-#   actions: write   # allow deleting old caches
+#   actions: write
 #   contents: read
 
 # on:
-#   workflow_dispatch:
+#   workflow_dispatch: # for manual runs
 #     inputs:
 #       dry_run:
 #         description: "Check to run without posting"
@@ -19,8 +19,8 @@
 #     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
 #     with:
 #       dry_run: ${{ inputs.dry_run }}
-#       sites_path: config/sites.yaml     # path INSIDE THIS REPO
-#       tool_ref: main                          # or a tag like v0.1
+#       sites_path: config/sites.yaml     # list of searches on uma-global-db
+#       tool_ref: main
 #       outputs_profiles: "discord_forum" # only option available right now
 #     secrets:
 #       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
