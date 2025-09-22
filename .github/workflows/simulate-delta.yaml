@@ -9,7 +9,7 @@ on:
         options: [Staging, Prod]
         default: Staging
       simulate_search:
-        description: "Search name to target (leave blank = first search)"
+        description: "Search name to target (leave blank or not exact name = first search as determined by the script)"
         type: string
         required: false
       simulate_count:
