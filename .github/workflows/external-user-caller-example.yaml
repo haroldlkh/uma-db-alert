@@ -24,4 +24,3 @@
 #       outputs_profiles: "discord_forum" # only option available right now
 #     secrets:
 #       CALLER_DISCORD_WEBHOOK: ${{ secrets.MY_DISCORD_WEBHOOK }}
-
