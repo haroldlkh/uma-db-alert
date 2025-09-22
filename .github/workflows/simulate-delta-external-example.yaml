@@ -39,6 +39,7 @@ jobs:
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
           restore-keys: |
             uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-
+            uma-state-${{ github.repository }}--v1-
 
       - name: Match state namespace env
         run: |
