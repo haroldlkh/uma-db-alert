@@ -16,13 +16,13 @@ on:
       # DISCORD_WEBHOOK_TEXT:  { required: false }
 
 jobs:
-  run:
-    # prod/staging guard stays (you already have it at the caller too)
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
-    runs-on: ubuntu-latest    
+  run:    
     permissions:
       actions: write
       contents: read
+    # prod/staging guard stays (you already have it at the caller too)
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
+    runs-on: ubuntu-latest
 
     # Export any provided secrets as env vars (empty if secret not set).
     # Preflight will check only the ones required by your selected outputs.
