@@ -164,7 +164,6 @@ jobs:
         with:
           path: ${{ steps.st.outputs.dir }}
           key: uma-state-${{ github.repository }}-${{ inputs.environment_name }}-v1-${{ github.run_id }}
-          retention-days: 7
 
       # 10) (Optional) prune: keep newest 3; skips silently if no permission
       - name: Prune old UMA state caches (keep last 3)
