@@ -68,7 +68,7 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
             s0 = st.load(site['source_site'], url)
             print(f"[debug] state_file={spath} seeded={s0.get('seeded')} seen={len(s0.get('digests',{}))}")
 
-            to_post = filter_new_or_changed(site['source_site'], url, eff_opts, records)
+            to_post = filter_new_or_changed(site['source_site'], state_key, eff_opts, records)
             print(f"[state] site={site.get('id')} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
             
             # Use the per-search state key so newly added searches seed without posting
