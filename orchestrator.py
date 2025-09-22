@@ -62,6 +62,11 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
                 print("No records for search:", url)
                 continue
 
+            # DEBUG: which state file & seeded?
+            spath = st.state_path(site['source_site'], url)
+            s0 = st.load(site['source_site'], url)
+            print(f"[debug] state_file={spath} seeded={s0.get('seeded')} seen={len(s0.get('digests',{}))}")
+
             to_post = filter_new_or_changed(site['source_site'], url, eff_opts, records)
             print(f"[state] site={site.get('id')} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
 
