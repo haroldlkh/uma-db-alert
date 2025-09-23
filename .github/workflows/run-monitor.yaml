@@ -17,8 +17,6 @@ on:
 
 jobs:
   run:
-    # prod/staging guard stays (you already have it at the caller too)
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.RUN_MONITOR == 'true') }}
     environment: ${{ inputs.environment_name }}
     runs-on: ubuntu-latest
 
