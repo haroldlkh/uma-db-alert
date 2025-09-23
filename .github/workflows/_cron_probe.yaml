@@ -2,7 +2,7 @@
 name: _cron_probe
 on:
   schedule:
-    - cron: "*/6 * * * *"
+    - cron: "*/5 * * * *"
 jobs:
   ping:
     runs-on: ubuntu-latest
