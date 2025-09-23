@@ -30,7 +30,7 @@ jobs:
       # 1) Caller repo (their sites.yaml usually lives here)
       - uses: actions/checkout@v4
 
-      # 2) Your tool repo (code + catalogue), pinned by input
+      # 2) Tool repo (code + catalogue), pinned by input
       - name: Checkout UMA tool repo
         uses: actions/checkout@v4
         with:
