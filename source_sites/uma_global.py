@@ -84,11 +84,12 @@ def parse_card(ctx, page, *, verbose=False):
     uniq  = chips("factor3")
     white_skills = chips("factor4")
     white_races = chips("factor5")
-    white = white_skills + white_races
+    scenario = chips("factor6")
+    white = white_skills + white_races + scenario
 
     # counts:
-    white_skills_count, white_races_count = _count_white(white_skills), _count_white(white_races)
-    white_count = white_skills_count + white_races_count
+    white_skills_count, white_races_count, scenario_count = _count_white(white_skills), _count_white(white_races), _count_white(scenario)
+    white_count = white_skills_count + white_races_count + scenario_count
 
     # grab "G1 Win countNN" text from within the row
     g1_count = 0
