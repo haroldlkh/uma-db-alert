@@ -16,7 +16,6 @@ Watches **UMA Global DB** searches and posts only **new/changed** trainers to a 
 ## Who is this for?
 
 - **Users** who just want alerts in their own Discord: see **[External usage](docs/USAGE_EXTERNAL.md)**.
-- **Developers** who want to change/extend the logic, outputs, or workflows: see **[Developer guide](docs/DEVELOPERS.md)**.
 
 ---
 
@@ -46,5 +45,4 @@ Discord forum post(s)
 
 ## Links
 
-- **External usage (copy-paste friendly)** → [`docs/USAGE_EXTERNAL.md`](docs/USAGE_EXTERNAL.md)  
-- **Developer guide** → [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md)
+- **External usage (copy-paste friendly)** → [`docs/USAGE_EXTERNAL.md`](docs/USAGE_EXTERNAL.md)

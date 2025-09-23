@@ -70,19 +70,19 @@ on:
     - cron: "0 * * * *"   # every 1h (UTC). Adjust as needed. Github may delay or reject request, keep it reasonable.
 
 jobs:
-  # Manual trigger: pass `dry_run` through
+  # Manual trigger
   monitor_dispatch:
     if: github.event_name == 'workflow_dispatch'
     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
     with:
       dry_run: ${{ inputs.dry_run }}
       sites_path: config/sites.yaml
-      tool_ref: main               # tip: pin to a tag or commit SHA for reproducibility
+      tool_ref: main
       outputs_profiles: discord_forum
     secrets:
       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
 
-  # Scheduled trigger: do NOT reference inputs.*; let defaults apply (dry_run=false)
+  # Scheduled trigger
   monitor_schedule:
     if: github.event_name == 'schedule'
     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
