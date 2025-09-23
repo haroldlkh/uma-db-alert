@@ -15,9 +15,8 @@
 #     - cron: "*/6 * * * *"   # every 6 minutes
 
 # jobs:
-#   # Manual trigger: pass the input through
 #   monitor_dispatch:
-#     if: github.event_name == 'workflow_dispatch'
+#     if: ${{ github.event_name == 'workflow_dispatch' }}
 #     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
 #     with:
 #       dry_run: ${{ inputs.dry_run }}
@@ -27,9 +26,8 @@
 #     secrets:
 #       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.MY_DISCORD_WEBHOOK }}
 
-#   # Scheduled trigger: do NOT reference inputs.* (let reusable default dry_run=false)
 #   monitor_schedule:
-#     if: github.event_name == 'schedule'
+#     if: ${{ github.event_name == 'schedule' }}
 #     uses: haroldlkh/uma-db-alert/.github/workflows/external-run-monitor.yaml@main
 #     with:
 #       sites_path: config/sites.yaml
