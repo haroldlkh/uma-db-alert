@@ -3,11 +3,18 @@ name: _cron_probe
 on:
   schedule:
     - cron: "*/10 * * * *"
-    
+
   workflow_dispatch:
 
 jobs:
-  ping:
+  ping_dispatch:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "event=${{ github.event_name }} utc=$(date -u +%FT%TZ)"
+      - run: echo "Manual event=${{ github.event_name }} utc=$(date -u +%FT%TZ)"
+
+  ping_schedule:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Schedule event=${{ github.event_name }} utc=$(date -u +%FT%TZ)"
