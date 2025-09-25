@@ -45,7 +45,7 @@ def _join(xs, sep=", "):
     tokens = [_sanitize(x) for x in xs if _clean_ws(x)]
     return sep.join(tokens)
 
-def make_title_and_body(r: Dict) -> Tuple[str, str]:
+def make_title_and_body(r: Dict, search_name: str) -> Tuple[str, str]:
     """
     Expected record fields:
       trainer_id, blue_list, pink_list, unique_list, white_list, white_count, g1_count, id_url
@@ -85,6 +85,7 @@ def make_title_and_body(r: Dict) -> Tuple[str, str]:
         f"Pink:   {pink}\n"
         f"Unique: {uniq}\n"
         f"White:  {white}\n\n"
+        f"{search_name}\n"
         f"{id_url}"
     ).strip()
 
