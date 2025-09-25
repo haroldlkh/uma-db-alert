@@ -72,7 +72,7 @@ def run(sites_cfg_path: str, outputs_cfg_path: str, dry_run: bool) -> int:
             print(f"[state] site={state_site_id} search={search.get('name')} scanned={len(records)} emit={len(to_post)}")
 
             for r in to_post:
-                title, body = make_title_and_body(r)
+                title, body = make_title_and_body(r, state_site_id)
                 send_to_all_outputs(title, body, outputs_cfg, dry_run=dry_run)
                 time.sleep(1.0)
                 print("Posted trainer:", r["trainer_id"], f"(dry_run={dry_run})")
