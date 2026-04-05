@@ -235,6 +235,8 @@ def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
         "next_button": None,
         "element_from_point": None,
         "overlays": [],
+        "fc_message_buttons": [],
+        "fc_message_root": None,
     }
 
     try:
@@ -245,9 +247,9 @@ def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
         box = None
 
     try:
-        overlays = page.evaluate("""
+        diagnostics = page.evaluate("""
 () => {
-  return [...document.querySelectorAll('.fc-dialog-overlay')].map((el, i) => {
+  const overlays = [...document.querySelectorAll('.fc-dialog-overlay')].map((el, i) => {
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
     return {
@@ -265,9 +267,54 @@ def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
       height: r.height
     };
   });
+
+  const root = document.querySelector('.fc-message-root');
+  const rootInfo = root ? (() => {
+    const cs = getComputedStyle(root);
+    const r = root.getBoundingClientRect();
+    return {
+      className: root.className,
+      text: (root.innerText || '').trim().slice(0, 400),
+      display: cs.display,
+      visibility: cs.visibility,
+      opacity: cs.opacity,
+      pointerEvents: cs.pointerEvents,
+      zIndex: cs.zIndex,
+      top: r.top,
+      left: r.left,
+      width: r.width,
+      height: r.height
+    };
+  })() : null;
+
+  const buttons = [...document.querySelectorAll('.fc-message-root button, .fc-message-root [role="button"], .fc-message-root a')]
+    .slice(0, 25)
+    .map((el, i) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return {
+        index: i,
+        tag: el.tagName,
+        className: el.className,
+        text: (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 120),
+        display: cs.display,
+        visibility: cs.visibility,
+        opacity: cs.opacity,
+        pointerEvents: cs.pointerEvents,
+        zIndex: cs.zIndex,
+        top: r.top,
+        left: r.left,
+        width: r.width,
+        height: r.height
+      };
+    });
+
+  return { overlays, rootInfo, buttons };
 }
 """)
-        result["overlays"] = overlays
+        result["overlays"] = diagnostics.get("overlays", [])
+        result["fc_message_root"] = diagnostics.get("rootInfo")
+        result["fc_message_buttons"] = diagnostics.get("buttons", [])
     except Exception as e:
         result["overlay_error"] = str(e)
 
@@ -318,34 +365,86 @@ def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
     print(f"[debug] wrote pagination debug files to {base}")
 
 
-def dismiss_fc_overlay(page: Page):
+def dismiss_fc_overlay(page: Page, *, verbose: bool = False) -> bool:
+    """
+    Try to dismiss the fc-message-root popup system.
+    Returns True if the overlay disappears, False otherwise.
+    """
     selectors = [
-        ".fc-close",
-        ".fc-close-button",
-        "button[aria-label*='close' i]",
-        "button:has-text('Close')",
-        "button:has-text('Accept')",
-        "button:has-text('Agree')",
-        "button:has-text('OK')",
-        "button:has-text('Dismiss')",
+        ".fc-message-root button[aria-label*='close' i]",
+        ".fc-message-root [role='button'][aria-label*='close' i]",
+        ".fc-message-root .fc-close",
+        ".fc-message-root .fc-close-button",
+        ".fc-message-root button:has-text('Close')",
+        ".fc-message-root button:has-text('Accept')",
+        ".fc-message-root button:has-text('Agree')",
+        ".fc-message-root button:has-text('OK')",
+        ".fc-message-root button:has-text('Dismiss')",
+        ".fc-message-root button:has-text('Continue')",
+        ".fc-message-root button:has-text('Got it')",
     ]
 
     for sel in selectors:
         try:
             loc = page.locator(sel).first
             if loc.count() > 0 and loc.is_visible():
-                print(f"[debug] dismiss_fc_overlay: clicking {sel}")
-                loc.click(timeout=2000)
-                page.wait_for_timeout(500)
-                return
+                _log(verbose, f"dismissing overlay via {sel}")
+                loc.click(timeout=2_000)
+                page.wait_for_timeout(750)
+                if page.locator(".fc-dialog-overlay").count() == 0:
+                    return True
+                try:
+                    page.locator(".fc-dialog-overlay").first.wait_for(state="hidden", timeout=2_000)
+                    return True
+                except Exception:
+                    pass
         except Exception as e:
-            print(f"[debug] dismiss_fc_overlay: failed clicking {sel}: {e}")
+            _log(verbose, f"dismiss selector failed {sel}: {e}")
+
+    # JS fallback: click a likely button inside the popup if one exists.
+    try:
+        clicked = page.evaluate("""
+() => {
+  const candidates = [...document.querySelectorAll('.fc-message-root button, .fc-message-root [role="button"], .fc-message-root a')];
+  const wanted = ['close', 'accept', 'agree', 'ok', 'dismiss', 'continue', 'got it'];
+  for (const el of candidates) {
+    const label = ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+    if (wanted.some(k => label.includes(k))) {
+      el.click();
+      return { clicked: true, label };
+    }
+  }
+  return { clicked: false };
+}
+""")
+        _log(verbose, f"js overlay dismiss attempt: {clicked}")
+        page.wait_for_timeout(750)
+    except Exception as e:
+        _log(verbose, f"js dismiss attempt failed: {e}")
 
     try:
-        page.locator(".fc-dialog-overlay").first.wait_for(state="hidden", timeout=3000)
-        print("[debug] dismiss_fc_overlay: overlay hidden")
+        page.locator(".fc-dialog-overlay").first.wait_for(state="hidden", timeout=2_500)
+        return True
     except Exception:
         pass
+
+    # Last resort: remove the blocking backdrop so pagination can be tested.
+    try:
+        removed = page.evaluate("""
+() => {
+  const overlays = [...document.querySelectorAll('.fc-dialog-overlay')];
+  for (const el of overlays) el.remove();
+  return overlays.length;
+}
+""")
+        if removed:
+            _log(verbose, f"removed {removed} fc-dialog-overlay element(s) as fallback")
+            page.wait_for_timeout(300)
+            return True
+    except Exception as e:
+        _log(verbose, f"overlay remove fallback failed: {e}")
+
+    return page.locator(".fc-dialog-overlay").count() == 0
 
 
 def go_next_page(page: Page, verbose: bool = False) -> bool:
@@ -372,17 +471,16 @@ def go_next_page(page: Page, verbose: bool = False) -> bool:
     except Exception:
         pass
 
-    # If an overlay is present, try to dismiss it first.
     try:
         if page.locator(".fc-dialog-overlay").count() > 0:
             _log(verbose, "fc-dialog-overlay detected before next click")
-            dismiss_fc_overlay(page)
+            dismiss_fc_overlay(page, verbose=verbose)
             page.wait_for_timeout(500)
     except Exception:
         pass
 
     try:
-        next_btn.click(timeout=5000)
+        next_btn.click(timeout=5_000)
     except Exception as e:
         _log(verbose, f"normal next click failed: {e}")
         capture_pagination_debug(page, next_btn, label="next_click_failed")
@@ -408,7 +506,7 @@ def go_next_page(page: Page, verbose: bool = False) -> bool:
                 return first.getAttribute("href") !== prevHref;
             }""",
             arg=prev_first_href,
-            timeout=8000,
+            timeout=8_000,
         )
         _log(verbose, "pagination succeeded")
         return True

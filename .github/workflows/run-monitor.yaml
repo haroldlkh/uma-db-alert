@@ -141,6 +141,16 @@ jobs:
             --outputs outputs.effective.yaml \
             $DRY
 
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uma-debug-${{ inputs.environment_name }}-${{ github.run_id }}
+          path: debug/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Save state cache
         if: always()
         uses: actions/cache/save@v4
