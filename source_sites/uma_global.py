@@ -407,7 +407,7 @@ def go_next_page(page: Page, verbose: bool = False) -> bool:
                 if (!first) return false;
                 return first.getAttribute("href") !== prevHref;
             }""",
-            prev_first_href,
+            arg=prev_first_href,
             timeout=8000,
         )
         _log(verbose, "pagination succeeded")
