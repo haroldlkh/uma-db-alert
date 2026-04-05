@@ -1,6 +1,11 @@
 from __future__ import annotations
+
+import json
 import re
+from pathlib import Path
+from datetime import datetime
 from typing import Dict, List, Any, Optional
+
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError, Page
 
 # ---------------------- switches live in config only --------------------------
@@ -16,10 +21,11 @@ DEFAULTS = {
 }
 
 PRESETS = {
-    "staging": { "headless": True,  "mode": "first", "verbose": True },
-    "prod":    { "headless": True,  "mode": "first", "verbose": False },
+    "staging": {"headless": True, "mode": "first", "verbose": True},
+    "prod": {"headless": True, "mode": "first", "verbose": False},
 }
 ALLOWED_KEYS = set(DEFAULTS.keys())
+
 
 def merge_site_options(site_options: Dict[str, Any]) -> Dict[str, Any]:
     """Merge DEFAULTS <- PRESET <- site_options (filtered to keys this site understands)."""
@@ -30,76 +36,80 @@ def merge_site_options(site_options: Dict[str, Any]) -> Dict[str, Any]:
     for k, v in (site_options or {}).items():
         if k in ALLOWED_KEYS:
             opts[k] = v
-    # normalize types
+
     opts["mode"] = str(opts["mode"]).lower()
     opts["max_pages"] = int(opts["max_pages"])
     opts["headless"] = bool(opts["headless"])
     opts["verbose"] = bool(opts["verbose"])
     return opts
 
+
 # ----------------------------- DOM helpers -----------------------------------
 _ID_RE = re.compile(r"(\d{6,})")
+
+
 def _first_id_from_href(href: Optional[str]) -> Optional[str]:
-    if not href: return None
+    if not href:
+        return None
     m = _ID_RE.search(href)
     return m.group(1) if m else None
 
-def _log(v: bool, *a): 
-    if v: print("[uma_global]", *a)
 
-# One row = one result card
+def _log(v: bool, *a):
+    if v:
+        print("[uma_global]", *a)
+
+
 ROW_XPATH = "//table[contains(@class,'b-table')]//tbody//tr[.//a[contains(@href,'#/user/')]]"
 
-def find_result_cards(page):
-    # all rows that have a profile link
+
+def find_result_cards(page: Page):
     return page.locator(f"xpath=({ROW_XPATH})")
 
-_WHITE_REP = re.compile(r"\(Representative\s*(\d+)\)", re.I)
 
 def _count_white(white_items: list[str]) -> int:
-    # Count items that contain the word "Representative" (case-insensitive)
     return sum(1 for s in (white_items or []) if "representative" in (s or "").lower())
 
 
-def parse_card(ctx, page, *, verbose=False):
-    # profile link from this row only
+def parse_card(ctx, page: Page, *, verbose: bool = False):
     link = ctx.locator("a[href*='#/user/']").first
     if link.count() == 0:
         return None
+
     href = link.get_attribute("href") or ""
-    tid  = _first_id_from_href(href)
+    tid = _first_id_from_href(href)
     if not tid:
         return None
+
     id_url = href if href.startswith("http") else f"https://uma-global.pure-db.com/#/user/{tid}"
 
-    # chips scoped to this row
     def chips(cls: str):
         try:
             return [t.strip() for t in ctx.locator(f".{cls}").all_inner_texts() if t.strip()]
         except Exception:
             return []
 
-    blue  = chips("factor1")
-    pink  = chips("factor2")
-    uniq  = chips("factor3")
+    blue = chips("factor1")
+    pink = chips("factor2")
+    uniq = chips("factor3")
     white_skills = chips("factor4")
     white_races = chips("factor5")
     scenario = chips("factor6")
     white = white_skills + white_races + scenario
 
-    # counts:
-    white_skills_count, white_races_count, scenario_count = _count_white(white_skills), _count_white(white_races), _count_white(scenario)
+    white_skills_count = _count_white(white_skills)
+    white_races_count = _count_white(white_races)
+    scenario_count = _count_white(scenario)
     white_count = white_skills_count + white_races_count + scenario_count
 
-    # grab "G1 Win countNN" text from within the row
     g1_count = 0
     try:
-        g1_node = ctx.locator(".g1_win_count").first  # e.g., <div class="g1_win_count text_black">G1 Win count13</div>
+        g1_node = ctx.locator(".g1_win_count").first
         if g1_node.count() > 0:
             txt = g1_node.inner_text().strip()
-            m = re.search(r'(\d+)$', txt)  # capture the trailing number (13)
+            m = re.search(r"(\d+)$", txt)
             if not m:
-                m = re.search(r'G1\s*Win\s*count\s*(\d+)', txt, re.I)
+                m = re.search(r"G1\s*Win\s*count\s*(\d+)", txt, re.I)
             if m:
                 g1_count = int(m.group(1))
     except Exception:
@@ -111,66 +121,74 @@ def parse_card(ctx, page, *, verbose=False):
         "site_id": "uma_global",
         "trainer_id": tid,
         "id_url": id_url,
-        "blue_list":   blue,
-        "pink_list":   pink,
+        "blue_list": blue,
+        "pink_list": pink,
         "unique_list": uniq,
-        "white_list":  white,
+        "white_list": white,
         "white_count": white_count,
-        "g1_count":    g1_count,
+        "g1_count": g1_count,
     }
 
-def collect_page_records(page: Page, mode: str, *, verbose=False) -> List[Dict]:
+
+def collect_page_records(page: Page, mode: str, *, verbose: bool = False) -> List[Dict]:
     cards = find_result_cards(page)
     n = cards.count()
     if n == 0:
         _log(verbose, "no cards on page")
         return []
+
     if mode == "first":
         rec = parse_card(cards.first, page, verbose=verbose)
         return [rec] if rec else []
-    # mode = first_per_page or all (for now both mean “one record per card”)
+
     out: List[Dict] = []
     for i in range(n):
         rec = parse_card(cards.nth(i), page, verbose=verbose)
-        if rec: out.append(rec)
+        if rec:
+            out.append(rec)
     return out
 
+
 # -------------------------- navigation/search --------------------------------
-def open_search(page: Page, url: str, *, trigger_timeout_ms: int,
-                results_timeout_ms: int, max_click_retries: int, verbose: bool) -> str:
+def open_search(
+    page: Page,
+    url: str,
+    *,
+    trigger_timeout_ms: int,
+    results_timeout_ms: int,
+    max_click_retries: int,
+    verbose: bool,
+) -> str:
     """
     Navigate to the search URL and try to trigger the search.
     Returns one of: "results" (>=1 row), "empty" (0 rows), "failed" (couldn't trigger).
     """
     page.goto(url, wait_until="domcontentloaded")
 
-    # Wait until UI has the search button and the table skeleton.
     try:
         page.wait_for_selector(".btn-group .btn-success", timeout=10_000)
         page.wait_for_selector("table.b-table", timeout=10_000)
     except PWTimeoutError:
-        _log(verbose, "UI not ready (no button/table)");  return "failed"
+        _log(verbose, "UI not ready (no button/table)")
+        return "failed"
 
     btn = page.locator(".btn-group .btn-success").first
 
     for attempt in range(1, max_click_retries + 1):
         try:
-            # Make sure the button is interactable, then click once.
             btn.wait_for(state="visible", timeout=1_000)
             if not btn.is_enabled():
                 page.wait_for_timeout(150)
+
             btn.click()
 
-            # Did the search actually start? (table goes busy=true briefly)
             try:
-                page.wait_for_selector("table.b-table[aria-busy='true']",
-                                       timeout=trigger_timeout_ms)
+                page.wait_for_selector("table.b-table[aria-busy='true']", timeout=trigger_timeout_ms)
             except PWTimeoutError:
-                _log(verbose, f"Search click attempt {attempt}: no busy=true → retry")
+                _log(verbose, f"Search click attempt {attempt}: no busy=true -> retry")
                 page.wait_for_timeout(200 * attempt)
-                continue  # try clicking again
+                continue
 
-            # Now wait for completion (busy=false), then count rows.
             page.wait_for_function(
                 "() => { const t=document.querySelector('table.b-table');"
                 "return t && t.getAttribute('aria-busy')==='false'; }",
@@ -185,75 +203,220 @@ def open_search(page: Page, url: str, *, trigger_timeout_ms: int,
             _log(verbose, f"Search click attempt {attempt} raised: {e!r}")
             page.wait_for_timeout(200 * attempt)
 
-    _log(verbose, "exhausted search click retries → failed")
+    _log(verbose, "exhausted search click retries -> failed")
     return "failed"
 
-def go_next_page(page: Page, *, verbose: bool, timeout_ms: int = 10_000) -> bool:
+
+# -------------------------- pagination debug helpers --------------------------
+DEBUG_DIR = Path("debug") / "uma_global"
+
+
+def ensure_debug_dir():
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def debug_timestamp():
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+
+def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
     """
-    Click the 'Next' pager ONLY. Returns True if we actually navigated to a new page.
-    Handles:
-      - no pagination bar (single page / no results)
-      - disabled next (last page)
-      - busy table refresh
+    Writes:
+      debug/uma_global/<timestamp>_<label>.png
+      debug/uma_global/<timestamp>_<label>.json
     """
-    def first_href() -> str:
-        a = page.locator("a[href*='#/user/']").first
-        return a.get_attribute("href") or ""
+    ensure_debug_dir()
+    stamp = debug_timestamp()
+    base = DEBUG_DIR / f"{stamp}_{label}"
 
-    # If there is no pagination bar at all, we can't advance.
-    if page.locator("ul.pagination.b-pagination").count() == 0:
-        _log(verbose, "pagination bar not present")
-        return False
+    result = {
+        "label": label,
+        "timestamp": stamp,
+        "next_button": None,
+        "element_from_point": None,
+        "overlays": [],
+    }
 
-    # If the 'Next' control is disabled (span, or li.page-item.disabled), stop.
-    next_disabled = page.locator(
-        "ul.pagination .page-item.disabled span[role='menuitem'][aria-label*='next' i]"
-    )
-    if next_disabled.count() > 0:
-        _log(verbose, "Next is disabled (last page)")
-        return False
+    try:
+        box = next_btn.bounding_box()
+        result["next_button"] = box
+    except Exception as e:
+        result["next_button_error"] = str(e)
+        box = None
 
-    # Normal case: Next is a button we can click.
+    try:
+        overlays = page.evaluate("""
+() => {
+  return [...document.querySelectorAll('.fc-dialog-overlay')].map((el, i) => {
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {
+      index: i,
+      className: el.className,
+      display: cs.display,
+      visibility: cs.visibility,
+      opacity: cs.opacity,
+      pointerEvents: cs.pointerEvents,
+      zIndex: cs.zIndex,
+      position: cs.position,
+      top: r.top,
+      left: r.left,
+      width: r.width,
+      height: r.height
+    };
+  });
+}
+""")
+        result["overlays"] = overlays
+    except Exception as e:
+        result["overlay_error"] = str(e)
+
+    if box:
+        try:
+            cx = box["x"] + box["width"] / 2
+            cy = box["y"] + box["height"] / 2
+            hit = page.evaluate(
+                """([x, y]) => {
+                    const el = document.elementFromPoint(x, y);
+                    if (!el) return null;
+                    const cs = getComputedStyle(el);
+                    const r = el.getBoundingClientRect();
+                    return {
+                        tag: el.tagName,
+                        className: el.className,
+                        text: (el.innerText || '').trim().slice(0, 200),
+                        display: cs.display,
+                        visibility: cs.visibility,
+                        opacity: cs.opacity,
+                        pointerEvents: cs.pointerEvents,
+                        zIndex: cs.zIndex,
+                        top: r.top,
+                        left: r.left,
+                        width: r.width,
+                        height: r.height
+                    };
+                }""",
+                [cx, cy],
+            )
+            result["element_from_point"] = hit
+        except Exception as e:
+            result["element_from_point_error"] = str(e)
+
+    try:
+        page.screenshot(path=str(base.with_suffix(".png")), full_page=True)
+    except Exception as e:
+        result["screenshot_error"] = str(e)
+
+    try:
+        base.with_suffix(".json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[debug] failed to write json debug file: {e}")
+
+    print(f"[debug] wrote pagination debug files to {base}")
+
+
+def dismiss_fc_overlay(page: Page):
+    selectors = [
+        ".fc-close",
+        ".fc-close-button",
+        "button[aria-label*='close' i]",
+        "button:has-text('Close')",
+        "button:has-text('Accept')",
+        "button:has-text('Agree')",
+        "button:has-text('OK')",
+        "button:has-text('Dismiss')",
+    ]
+
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() > 0 and loc.is_visible():
+                print(f"[debug] dismiss_fc_overlay: clicking {sel}")
+                loc.click(timeout=2000)
+                page.wait_for_timeout(500)
+                return
+        except Exception as e:
+            print(f"[debug] dismiss_fc_overlay: failed clicking {sel}: {e}")
+
+    try:
+        page.locator(".fc-dialog-overlay").first.wait_for(state="hidden", timeout=3000)
+        print("[debug] dismiss_fc_overlay: overlay hidden")
+    except Exception:
+        pass
+
+
+def go_next_page(page: Page, verbose: bool = False) -> bool:
     next_btn = page.locator(
         "ul.pagination .page-item button[role='menuitem'][aria-label*='next' i]"
     ).first
+
     if next_btn.count() == 0:
-        _log(verbose, "Next button not found")
+        _log(verbose, "next button not found")
         return False
 
-    prev = first_href()
-    _log(verbose, f"clicking Next; prev_first_href={prev!r}")
-    next_btn.click()
+    try:
+        if not next_btn.is_visible():
+            _log(verbose, "next button not visible")
+            return False
+    except Exception:
+        return False
 
-    # Wait for either:
-    #  - first result href changes, OR
-    #  - table finishes a refresh (aria-busy flips false) and first link exists/changes.
+    prev_first_href = None
+    try:
+        first_link = page.locator("a[href*='#/user/']").first
+        if first_link.count() > 0:
+            prev_first_href = first_link.get_attribute("href")
+    except Exception:
+        pass
+
+    # If an overlay is present, try to dismiss it first.
+    try:
+        if page.locator(".fc-dialog-overlay").count() > 0:
+            _log(verbose, "fc-dialog-overlay detected before next click")
+            dismiss_fc_overlay(page)
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    try:
+        next_btn.click(timeout=5000)
+    except Exception as e:
+        _log(verbose, f"normal next click failed: {e}")
+        capture_pagination_debug(page, next_btn, label="next_click_failed")
+
+        try:
+            page.evaluate("""
+() => {
+  const btn = document.querySelector(
+    "ul.pagination .page-item button[role='menuitem'][aria-label*='next' i]"
+  );
+  if (btn) btn.click();
+}
+""")
+        except Exception as e2:
+            _log(verbose, f"js next click failed: {e2}")
+            return False
+
     try:
         page.wait_for_function(
-            """(prev) => {
-                const table = document.querySelector("table.b-table");
-                // changed first link?
-                const a = document.querySelector("a[href*='#/user/']");
-                const href = a ? (a.getAttribute('href') || '') : '';
-                if (href && href !== prev) return true;
-
-                // if table is busy, not ready yet
-                if (table && table.getAttribute('aria-busy') === 'true') return false;
-
-                // table claims not busy; ensure we at least have a link
-                return !!href && href !== prev;
+            """prevHref => {
+                const first = document.querySelector("a[href*='#/user/']");
+                if (!first) return false;
+                return first.getAttribute("href") !== prevHref;
             }""",
-            arg=prev,
-            timeout=timeout_ms,
+            prev_first_href,
+            timeout=8000,
         )
-    except PWTimeoutError:
-        _log(verbose, "Next click timed out without page change")
+        _log(verbose, "pagination succeeded")
+        return True
+    except Exception as e:
+        _log(verbose, f"page did not change after next click: {e}")
+        capture_pagination_debug(page, next_btn, label="next_click_no_page_change")
         return False
 
-    new = first_href()
-    changed = (new != prev) and bool(new)
-    _log(verbose, f"Next result: changed={changed}, new_first_href={new!r}")
-    return changed
 
 # --------------------------- public entry point -------------------------------
 def scrape(url: str, opts: Dict[str, Any]) -> List[Dict]:
@@ -263,15 +426,17 @@ def scrape(url: str, opts: Dict[str, Any]) -> List[Dict]:
         browser = p.chromium.launch(headless=opts["headless"])
         ctx = browser.new_context()
         page = ctx.new_page()
+
         try:
             status = open_search(
                 page,
                 url,
                 trigger_timeout_ms=opts["trigger_timeout_ms"],
-                results_timeout_ms=opts["search_timeout_ms"],   # reuse existing timeout
+                results_timeout_ms=opts["search_timeout_ms"],
                 max_click_retries=opts["max_click_retries"],
                 verbose=opts["verbose"],
             )
+
             if status != "results":
                 _log(opts["verbose"], f"search outcome: {status}")
                 return []
@@ -280,17 +445,18 @@ def scrape(url: str, opts: Dict[str, Any]) -> List[Dict]:
             out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
 
             pages_seen = 1
-            while (opts["max_pages"] == 0 or pages_seen < opts["max_pages"]):
+            while opts["max_pages"] == 0 or pages_seen < opts["max_pages"]:
                 if not go_next_page(page, verbose=opts["verbose"]):
                     break
+
                 page.wait_for_timeout(opts["settle_ms"])
                 pages_seen += 1
                 out.extend(collect_page_records(page, opts["mode"], verbose=opts["verbose"]))
+
         finally:
             ctx.close()
             browser.close()
 
-    # annotate source for downstream filtering/logging
     for r in out:
         r["source_url"] = url
     return out
