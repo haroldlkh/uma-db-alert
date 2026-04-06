@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from datetime import datetime
@@ -219,12 +220,20 @@ def debug_timestamp():
     return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
+def debug_artifacts_enabled() -> bool:
+    value = os.environ.get("UMA_WRITE_DEBUG_ARTIFACTS", "false").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 def capture_pagination_debug(page: Page, next_btn, label: str = "pagination"):
     """
     Writes:
       debug/uma_global/<timestamp>_<label>.png
       debug/uma_global/<timestamp>_<label>.json
     """
+    if not debug_artifacts_enabled():
+        return
+
     ensure_debug_dir()
     stamp = debug_timestamp()
     base = DEBUG_DIR / f"{stamp}_{label}"

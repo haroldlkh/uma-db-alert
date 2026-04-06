@@ -10,6 +10,7 @@ on:
       outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
       tool_ref:           { type: string,  required: false, default: "main" }  # tag/branch of YOUR repo
       prune_caches:       { type: boolean, default: true }         # keep newest 3
+      debug_artifacts:    { type: boolean, default: false }
     secrets:
       CALLER_DISCORD_WEBHOOK_FORUM: { required: false }
 
@@ -25,6 +26,7 @@ jobs:
     env:
       # Only expose what selected outputs require; preflight enforces presence
       DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
+      UMA_WRITE_DEBUG_ARTIFACTS: ${{ inputs.debug_artifacts }}
 
     steps:
       # 1) Caller repo (their sites.yaml usually lives here)
