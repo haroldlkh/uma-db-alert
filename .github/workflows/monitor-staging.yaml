@@ -15,10 +15,6 @@ on:
       reset_state:
         type: boolean
         default: false
-      debug_artifacts:
-        description: "Upload Playwright debug artifacts"
-        type: boolean
-        default: false
 
 jobs:
   staging:
@@ -28,6 +24,5 @@ jobs:
       reset_state: ${{ inputs.reset_state }}
       environment_name: "Staging"
       outputs_profiles: "discord_forum"   # or "discord_forum,discord_text" later
-      debug_artifacts: ${{ inputs.debug_artifacts }}
     secrets:
       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.ENV_DISCORD_WEBHOOK }}

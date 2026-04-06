@@ -8,7 +8,6 @@ on:
       environment_name:   { type: string,  required: true }
       reset_state:        { type: boolean, default: false }
       outputs_profiles:   { type: string,  required: false, default: "discord_forum" }
-      debug_artifacts:    { type: boolean, default: false }
     secrets:
       # Provide only the secrets you actually need for the selected outputs.
       # For "discord_forum", expose this (env-scoped in your repo; repo-scoped for external users):
@@ -25,7 +24,6 @@ jobs:
     # Preflight will check only the ones required by your selected outputs.
     env:
       DISCORD_WEBHOOK_FORUM: ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
-      UMA_WRITE_DEBUG_ARTIFACTS: ${{ inputs.debug_artifacts }}
       # DISCORD_WEBHOOK_TEXT:  ${{ secrets.CALLER_DISCORD_WEBHOOK_FORUM }}
 
     steps:
@@ -145,7 +143,7 @@ jobs:
 
 
       - name: Upload debug artifacts
-        if: ${{ always() && inputs.debug_artifacts }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: uma-debug-${{ inputs.environment_name }}-${{ github.run_id }}
