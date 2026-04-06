@@ -14,6 +14,11 @@ on:
         type: boolean
         required: false
         default: false
+      debug_artifacts:
+        description: "Upload Playwright debug artifacts"
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   # Manual trigger: may pass inputs.dry_run
@@ -24,6 +29,8 @@ jobs:
       dry_run: ${{ inputs.dry_run }}
       environment_name: "Prod"
       outputs_profiles: "discord_forum"
+      debug_artifacts: false
+      debug_artifacts: ${{ inputs.debug_artifacts }}
     secrets:
       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.PROD_DISCORD_WEBHOOK }}
 
@@ -34,5 +41,7 @@ jobs:
     with:
       environment_name: "Prod"
       outputs_profiles: "discord_forum"
+      debug_artifacts: false
+      debug_artifacts: ${{ inputs.debug_artifacts }}
     secrets:
       CALLER_DISCORD_WEBHOOK_FORUM: ${{ secrets.PROD_DISCORD_WEBHOOK }}
